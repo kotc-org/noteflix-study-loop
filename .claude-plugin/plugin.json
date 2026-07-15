@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "noteflix-study-loop",
+  "displayName": "Noteflix Study Loop",
+  "version": "0.2.0",
+  "description": "Helps adult learners turn text supplied in the current request into source-faithful study guides, practice, quiz-first review, and study plans, then explicitly save approved results as private notes in Noteflix.",
+  "author": {
+    "name": "Noteflix",
+    "email": "support@noteflix.com",
+    "url": "https://noteflix.com"
+  },
+  "homepage": "https://github.com/kotc-org/noteflix-study-loop#readme",
+  "repository": "https://github.com/kotc-org/noteflix-study-loop",
+  "license": "MIT",
+  "keywords": [
+    "education",
+    "study-guides",
+    "flashcards",
+    "self-testing",
+    "study-planning",
+    "noteflix",
+    "private-notes"
+  ]
+}

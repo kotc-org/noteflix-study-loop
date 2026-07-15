@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "noteflix": {
+      "type": "http",
+      "url": "https://noteflix-study-mcp-738470476706.us-central1.run.app/mcp"
+    }
+  }
+}
