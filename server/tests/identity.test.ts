@@ -25,13 +25,16 @@ describe("Firebase Identity Toolkit consent verifier", () => {
         { status: 200, headers: { "content-type": "application/json" } },
       ),
     );
-    const verifier = new IdentityToolkitVerifier(testConfig(), fetchMock, () => 1_000_000);
+    const config = testConfig();
+    const verifier = new IdentityToolkitVerifier(config, fetchMock, () => 1_000_000);
 
     await expect(verifier.verify(token())).resolves.toEqual({ uid: "firebase-user-1" });
     const [target, init] = fetchMock.mock.calls[0]!;
     const url = new URL(String(target));
     expect(`${url.origin}${url.pathname}`).toBe("https://identitytoolkit.googleapis.com/v1/accounts:lookup");
     expect(url.searchParams.get("key")).toBe("test-web-api-key");
+    expect(new Headers(init?.headers).get("origin")).toBe(config.publicBaseUrl.origin);
+    expect(new Headers(init?.headers).get("referer")).toBe(`${config.publicBaseUrl.origin}/`);
     expect(JSON.parse(String(init?.body))).toEqual({ idToken: token() });
   });
 

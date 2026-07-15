@@ -69,7 +69,11 @@ export class IdentityToolkitVerifier implements NoteflixIdentityVerifier {
     try {
       response = await this.fetchImpl(endpoint, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          origin: this.config.publicBaseUrl.origin,
+          referer: `${this.config.publicBaseUrl.origin}/`,
+        },
         body: JSON.stringify({ idToken }),
         signal: AbortSignal.timeout(15_000),
       });
