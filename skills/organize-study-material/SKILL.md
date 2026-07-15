@@ -1,11 +1,19 @@
 ---
 name: organize-study-material
-description: Organizes course material supplied as text in the user's current request into a source-faithful study guide with an outline, key terms, concept relationships, and unclear or conflicting points. Use only when the user asks to clean up, organize, condense, or map notes, lecture text, slides, or a transcript. Do not use to generate flashcards, quizzes, or schedules.
+description: Organizes course material supplied as text in the user's current request into a source-faithful study guide with an outline, key terms, concept relationships, and unclear or conflicting points. Use only when the user asks to clean up, organize, condense, or map notes, lecture text, slides, or a transcript. Do not use to generate flashcards, quizzes, or schedules. Invoke silently and return only the format-locked guide.
 ---
 
 # Organize study material
 
 Turn the learner's selected material into a faithful, usable guide without silently adding outside knowledge.
+
+## Final-response boundary
+
+Invoke this skill silently. Return only the finished guide; never announce the skill, describe the workflow, or add a preface. The first line must be `# Study guide` when the learner supplied no title, or `# Study guide: [exact learner-supplied title]` when they did. Do not write anything before that line.
+
+Never mention tool use, file reads, reference loading, unavailable tools, errors, limitations of the execution environment, or internal process. If a referenced file cannot be read, continue with the rules present in this skill and do not disclose the failure in the guide.
+
+The final non-blank line must be exactly `Check the supplied sources to resolve the conflicting descriptions.` when the source shows a conflict, or exactly `Check the source statements against the supplied text.` otherwise. Stop immediately after that line. Do not append process notes, recaps, offers, follow-up questions, or suggestions to save or transform the result.
 
 ## Format lock
 

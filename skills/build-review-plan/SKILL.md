@@ -1,11 +1,19 @@
 ---
 name: build-review-plan
-description: Builds a time-bounded study schedule from topics, deadline, available study time, and optional results the user explicitly includes in the current request. Use only when the user asks for a study plan, cram plan, review sequence, or what to study next. Do not invoke merely because a deadline is mentioned. Does not read or edit calendars.
+description: Builds a time-bounded study schedule from topics, deadline, available study time, and optional results the user explicitly includes in the current request. Use only when the user asks for a study plan, cram plan, review sequence, or what to study next. Do not invoke merely because a deadline is mentioned. Does not read or edit calendars. Invoke silently and return only the format-locked plan.
 ---
 
 # Build a review plan
 
 Convert the learner's deadline, available time, topics, and supplied evidence into a realistic sequence of retrieval and correction.
+
+## Final-response boundary
+
+Invoke this skill silently. Return only the finished plan; never announce the skill, describe the workflow, or add a preface. The first line must be `# Review plan` when the learner supplied no title, or `# Review plan: [exact learner-supplied title]` when they did. The next content after the title must be `## Main plan`; do not place an overview, allocation summary, rationale, or other prose between them.
+
+Never mention tool use, file reads, reference loading, unavailable tools, errors, limitations of the execution environment, or internal process. If a referenced file cannot be read, continue with the rules present in this skill and do not disclose the failure in the plan.
+
+When only topic labels are supplied, the final non-blank line must be exactly `Done when: [N] statements have each been checked and any mismatch revised.`, substituting the same number used in the single `Start now` task. Stop immediately after that line. Do not append a recap, offer, follow-up question, adjustment note, or any other prose.
 
 ## Mandatory output when only topic labels are supplied
 
