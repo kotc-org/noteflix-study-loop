@@ -4,7 +4,7 @@
 
 - **Plugin name:** Noteflix Study Loop
 - **Plugin ID:** `noteflix-study-loop`
-- **Version:** `0.2.0`
+- **Version:** `0.3.0`
 - **Tagline:** Study what you supplied—not what the model guesses.
 - **Category:** Education
 - **Publisher:** Noteflix
@@ -25,7 +25,7 @@ Turns user-supplied study text into source-faithful guides, practice, quiz-first
 
 Noteflix Study Loop helps adult and higher-education learners turn text supplied in the current Claude request into an active review workflow. It organizes messy notes into source-faithful guides, creates flashcards and direct source-clause practice questions, leads one-question-at-a-time review, and builds realistic review plans from a deadline and available time.
 
-When a learner explicitly asks to save an artifact, the plugin shows the exact title, Markdown content, optional summary and key points, destination, and private visibility. It then asks for a separate confirmation. Only after an affirmative response does the plugin use the authenticated `create_private_note` tool to create a private note in the learner's real Noteflix account and return its in-app link.
+When a learner explicitly asks to save an artifact, the plugin shows the exact title, Markdown content, optional summary and key points, destination, and private visibility. It then asks for a separate confirmation. Only after an affirmative response does the plugin use the authenticated `create_private_note` tool to create a private note in the learner's real Noteflix account and return its in-app link. The server first requires an active eligible Noteflix subscription for the Firebase UID bound to OAuth and fails closed before any write if it cannot verify that entitlement.
 
 The plugin does not inspect uploads, retrieve prior conversations, query Claude memory, access other connectors, or search existing Noteflix content. Study source material must be supplied as text in the current request. It is not designed for users under 18 or K–12 student deployment.
 
@@ -44,6 +44,7 @@ The plugin does not inspect uploads, retrieve prior conversations, query Claude 
 - **Endpoint ownership:** The connector, OAuth metadata, and consent UI are served from the first-party `noteflix.com` domain and route only to Noteflix-operated backend services.
 - **Remote tool:** `create_private_note` only.
 - **Mutation:** Creates one private Noteflix note after explicit intent, exact-payload preview, and separate confirmation.
+- **Subscription:** Requires a current eligible paid or trial Noteflix subscription for the exact OAuth-bound account. A service-authenticated canonical Noteflix preflight runs before idempotency, and the write endpoint repeats the gate to close the race before mutation.
 - **Data sent:** Confirmed title, Markdown content, optional confirmed summary/key points, random idempotency request ID, and authenticated account identity.
 - **Existing data access:** None. The tool cannot list, read, search, update, publish, or delete existing notes.
 - **Media:** No AI video, audio, image, podcast, or other media-generation tool is exposed or invoked. Saving through this integration does not start derived-media generation.
@@ -56,7 +57,7 @@ Full retention and deletion details are in `PRIVACY.md`. Learners can delete not
 1. Clone the public repository and run `claude plugin validate --strict .`.
 2. Start Claude with `claude --plugin-dir .` or install through the plugin review environment.
 3. Paste the content of `samples/cell-biology-notes.md` into the current request and run the functional cases in `REVIEW_CHECKLIST.md`.
-4. Connect the dedicated, fully populated Noteflix reviewer account through the normal OAuth flow. Credentials and step-by-step access instructions are supplied privately to the review team and are never stored in this repository.
+4. Connect the dedicated, fully populated Noteflix reviewer account with an active eligible subscription through the normal OAuth flow. Credentials and step-by-step access instructions are supplied privately to the review team and are never stored in this repository.
 5. Ask Claude to save the generated study guide to Noteflix. Confirm that Claude first displays the exact private-note payload and stops.
 6. Reply affirmatively. Confirm that exactly one private note is created and that Claude returns its private Noteflix app link.
 7. Run the negative cases: ordinary study requests do not save; an edit requires a new preview and confirmation; a declined save makes no call; no video or media-generation tool is available.

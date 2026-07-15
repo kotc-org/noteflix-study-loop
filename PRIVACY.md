@@ -15,7 +15,7 @@ After confirmation, the plugin sends these fields to the Noteflix service:
 - a random request ID used to prevent duplicate creation; and
 - the authenticated Noteflix account identity associated with the OAuth grant.
 
-The integration forces the created note to private visibility. It does not send unapproved drafts, generate derived media, or transmit uploads, prior conversations, Claude memory, connector data, or existing Noteflix content.
+Before any write, the service checks only the connected account's subscription entitlement fields (account UID, status, tier, product or price identifier, platform, and relevant expiration/trial timestamps) to verify that the account is currently eligible. It does not retrieve payment-card details. The integration forces the created note to private visibility. It does not send unapproved drafts, generate derived media, or transmit uploads, prior conversations, Claude memory, connector data, or existing Noteflix content.
 
 ## OAuth and service data
 

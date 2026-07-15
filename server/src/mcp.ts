@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import type { AppConfig } from "./config.js";
-import type { NoteflixClient } from "./noteflix/client.js";
+import { NoteflixApiError, type NoteflixClient } from "./noteflix/client.js";
 import { createPrivateNoteInputSchema } from "./noteflix/input.js";
 import type { IdempotencyCoordinator } from "./persistence/idempotency.js";
 import { IdempotencyError, privateNoteInputHash } from "./persistence/idempotency.js";
@@ -23,12 +23,12 @@ const outputSchema = z.object({
 export function createNoteflixMcpServer(dependencies: {
   uid: string;
   config: AppConfig;
-  noteflixClient: Pick<NoteflixClient, "createPrivateNote">;
-  idempotency: IdempotencyCoordinator;
+  noteflixClient: Pick<NoteflixClient, "createPrivateNote" | "requireEligibleSubscription">;
+  idempotency: Pick<IdempotencyCoordinator, "run">;
 }): McpServer {
   const server = new McpServer({
     name: "noteflix-study-loop",
-    version: "0.2.0",
+    version: "0.3.0",
   });
   const inputSchema = createPrivateNoteInputSchema(dependencies.config.maxNoteContentChars);
 
@@ -71,6 +71,12 @@ export function createNoteflixMcpServer(dependencies: {
       }
 
       try {
+        // The UID is taken only from the verified OAuth access token by the
+        // HTTP layer. Check that exact identity before reserving idempotency or
+        // issuing the service-authenticated Noteflix write.
+        await dependencies.noteflixClient.requireEligibleSubscription(
+          dependencies.uid,
+        );
         const completed = await dependencies.idempotency.run({
           uid: dependencies.uid,
           requestId: parsed.data.request_id,
@@ -94,7 +100,7 @@ export function createNoteflixMcpServer(dependencies: {
         };
       } catch (cause) {
         const error =
-          cause instanceof IdempotencyError
+          cause instanceof IdempotencyError || cause instanceof NoteflixApiError
             ? cause
             : new IdempotencyError("note_creation_failed", "Noteflix could not create the note.", false);
         return {

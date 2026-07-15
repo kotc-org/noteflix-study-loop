@@ -15,7 +15,7 @@ The server is designed for Cloud Run but is not deployed by this package. It use
 | Consent | `GET /consent`, `POST /consent/complete` |
 | Health | `GET /health` |
 
-An unauthenticated MCP request returns `401` with a `WWW-Authenticate` header pointing at the path-specific Protected Resource Metadata document. Authorization and token requests must supply the exact, fragment-free `MCP_RESOURCE_URL`; missing or different resource values are rejected. Access tokens are valid only for that audience and must include `notes:create`.
+An unauthenticated MCP request returns `401` with a `WWW-Authenticate` header pointing at the path-specific Protected Resource Metadata document. Authorization and token requests must supply the exact, fragment-free `MCP_RESOURCE_URL`; missing or different resource values are rejected. Access tokens are valid only for that audience and must include `notes:create`. A valid grant does not itself authorize a write: every `create_private_note` call also requires a current eligible Noteflix subscription for the Firebase UID bound to that grant.
 
 ### Tool input
 
@@ -33,7 +33,11 @@ The input schema is strict. Unknown fields, publishing controls, collaborator ID
 
 ### Noteflix write
 
-The gateway uses its dedicated Google service identity to obtain an OIDC token for the exact `NOTEFLIX_INTERNAL_AUDIENCE` and sends exactly one authenticated request to `POST /internal/claude-mcp/ai-notes`. It does not mint or exchange Firebase custom tokens. The consented Firebase UID is included as `noteflixUserId`, and the backend accepts it only from the authorized gateway service identity. The gateway constructs the downstream body itself. It sends the confirmed Markdown once as the sole `notes` element and as `sourceText`; it never segments or summarizes that text. Omitted optional summary and key points become an empty string and empty array:
+Before reserving idempotency or contacting the write endpoint, the gateway obtains Google OIDC for the exact `NOTEFLIX_INTERNAL_AUDIENCE` and calls `GET /internal/claude-mcp/subscription-eligibility`. It sends `x-noteflix-integration: claude-mcp` and the Firebase UID bound to the verified OAuth token as `x-noteflix-user-id`. The service-authenticated backend checks that exact UID with Noteflix's strict `hasClaudePremiumAccess` resolver: a current, source-verified paid Stripe/IAP record or the immutable live RevenueCat premium entitlement. This avoids copying plan, platform, trial, product, or expiration rules into the gateway.
+
+The gateway accepts only the exact success body `{ "userId": "<same UID>", "isPremium": true }`. A different UID, `isPremium: false`, extra fields, an ineligible response, an unavailable entitlement authority, a malformed response, service-identity failure, or network error all fail closed before idempotency and before a note write. The create endpoint repeats the same canonical subscription gate to close the race between preflight and mutation; the adapter maps its `UPGRADE_REQUIRED`, `SUBSCRIPTION_REQUIRED`, and subscription-verification failure codes without claiming a note was created.
+
+After that check succeeds, the gateway uses its dedicated Google service identity to obtain an OIDC token for the exact `NOTEFLIX_INTERNAL_AUDIENCE` and sends exactly one authenticated request to `POST /internal/claude-mcp/ai-notes`. It does not mint or exchange Firebase custom tokens. The consented Firebase UID is included as `noteflixUserId`, and the backend accepts it only from the authorized gateway service identity. The gateway constructs the downstream body itself. It sends the confirmed Markdown once as the sole `notes` element and as `sourceText`; it never segments or summarizes that text. Omitted optional summary and key points become an empty string and empty array:
 
 ```json
 {
@@ -59,6 +63,7 @@ The adapter returns only the note ID, title, slug, private visibility, and a Not
 ## OAuth and trust boundaries
 
 - Dynamic Client Registration records, authorization requests, authorization codes, access tokens, rotating refresh tokens, idempotency records, and persistent rate-limit counters live in the dedicated Firestore database named by `FIRESTORE_DATABASE_ID`, not the Noteflix product database.
+- The gateway has no product-database access. It delegates subscription verification to the service-identity-protected Noteflix preflight endpoint so entitlement rules and RevenueCat recovery stay authoritative in the product backend.
 - Authorization requests, authorization codes, access tokens, and refresh tokens are opaque random values. Firestore stores only their SHA-256 hashes as document IDs.
 - Public clients use PKCE S256. Confidential DCR client secrets are AES-256-GCM encrypted at rest; keep the encryption key stable.
 - Dynamic registration accepts only the documented hosted Claude callback at `https://claude.ai/api/mcp/auth_callback`, plus HTTP loopback callbacks on ephemeral ports at the exact `/callback` path for `localhost` and `127.0.0.1`. Arbitrary HTTPS callbacks, IPv6 loopback, and other local hostnames are rejected.
@@ -74,11 +79,13 @@ The adapter returns only the note ID, title, slug, private visibility, and a Not
 
 `request_id` is a required UUID and is scoped to the Firebase UID. An identical successful retry returns the stored result without writing again. Reusing an ID with changed content is rejected.
 
+Subscription preflight failures occur before an idempotency reservation. If eligibility changes after preflight, the write endpoint's repeated gate rejects before its note handler; the gateway records that definite no-write response as retryable so the same confirmed `request_id` can be used after subscribing or restoring purchases.
+
 Failures that definitely happen before a Noteflix write (for example failure to acquire the service identity client) can reacquire the same idempotency record. A network timeout, 5xx, malformed success response, or abandoned in-flight lease is treated as outcome-unknown and is never automatically repeated. The caller is told to check the Noteflix library before choosing a new request ID. The gateway enforces request-ID idempotency before calling Noteflix and forwards the same UUID to the internal endpoint as `Idempotency-Key` and `X-Request-ID`; the internal endpoint receives these headers, but this gateway does not claim that it independently enforces them.
 
 ## Local development
 
-Requirements: Node 20, Application Default Credentials with access to the named gateway Firestore database and the internal Noteflix Cloud Run route, and Firebase Auth email/password and Google providers enabled.
+Requirements: Node 20, Application Default Credentials with access to the named gateway Firestore database and the internal Noteflix Cloud Run routes, and Firebase Auth email/password and Google providers enabled.
 
 ```bash
 cp .env.example .env
@@ -102,13 +109,13 @@ curl http://localhost:8080/.well-known/oauth-protected-resource/mcp
 ## Cloud Run preparation (not executed)
 
 1. Create a dedicated named Firestore database for gateway security state, set its ID as `FIRESTORE_DATABASE_ID`, and do not use the Noteflix product database.
-2. Create a dedicated runtime service account. Restrict its Firestore data access to the named gateway database with a resource condition where supported. If the target Cloud Run service is IAM-private, grant `roles/run.invoker` only on that service. Do not grant Firebase Auth administration, service-account token-creator, or product-database access. The backend must independently verify the OIDC audience and exact gateway service-account identity on the internal route.
+2. Create a dedicated runtime service account. Restrict its Firestore data access to the named gateway database with a resource condition where supported. If the target Cloud Run service is IAM-private, grant `roles/run.invoker` only on that service. Do not grant Firebase Auth administration, service-account token-creator, or product-database access. The backend must independently verify the OIDC audience and exact gateway service-account identity on both internal routes.
 3. Put `OAUTH_CLIENT_SECRET_ENCRYPTION_KEY` in Secret Manager. Treat OAuth tokens and the encryption key as credentials.
 4. Set `PUBLIC_BASE_URL` to the final HTTPS issuer origin and `MCP_RESOURCE_URL` to that same origin plus `/mcp`. These values are protocol identifiers and must not change after clients connect.
 5. Configure the remaining values from `.env.example`, including the exact `NOTEFLIX_INTERNAL_AUDIENCE`, `FIRESTORE_DATABASE_ID`, the production Noteflix Firebase Web App values, and explicit allowed origins.
 6. Build the container and deploy with a minimum of zero or more instances. Stateless MCP requests and Firestore persistence support horizontal scaling.
 7. Configure Firestore TTL policies on `deleteAfter` for authorization requests, codes, tokens, idempotency records, and rate-limit documents. TTL cleanup is hygiene; every lookup also enforces expiry synchronously.
-8. Verify discovery, DCR, PKCE, consent, token rotation, revocation, origin rejection, and a real private note in a non-production Firebase test user before directory submission.
+8. Verify discovery, DCR, PKCE, consent, token rotation, revocation, origin rejection, denial for an ineligible account, and a real private note for an eligible non-production Firebase test user before directory submission.
 
 Example build only:
 
@@ -131,6 +138,7 @@ Changing `OAUTH_CLIENT_SECRET_ENCRYPTION_KEY` invalidates stored confidential cl
 - OAuth scopes, current documented Claude redirect allowlisting, visible loopback consent warnings, and required exact resource binding;
 - idempotent success, retryable pre-request failure, and outcome-unknown behavior;
 - public Identity Toolkit consent verification and service-OIDC authorization for the real `/internal/claude-mcp/ai-notes` adapter contract;
-- path-specific protected-resource metadata, exact `401 WWW-Authenticate` discovery, exact payload forwarding, and Origin rejection.
+- path-specific protected-resource metadata, exact `401 WWW-Authenticate` discovery, exact payload forwarding, and Origin rejection;
+- exact OAuth-UID subscription preflight headers and response binding, fail-closed ineligible/unavailable/malformed responses, denial before idempotency, and create-time subscription-race error mapping.
 
 No test sends data to Noteflix or Firebase.

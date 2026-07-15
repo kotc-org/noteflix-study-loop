@@ -2,6 +2,12 @@
 
 All notable changes to Noteflix Study Loop are documented here.
 
+## 0.3.0 — 2026-07-15
+
+- Added a fail-closed, service-authenticated subscription preflight for the exact Firebase UID bound to OAuth before idempotency or note creation.
+- Added create-time subscription re-check error mapping so an entitlement change between preflight and mutation cannot bypass the canonical Noteflix gate.
+- Documented the active-subscription requirement and same-request-ID retry behavior after subscribing or restoring purchases.
+
 ## 0.2.0 — 2026-07-15
 
 - Added a remote OAuth MCP connection at the first-party `https://noteflix.com/mcp` endpoint with `notes:create` as its sole data-action scope and `offline_access` for refresh-token renewal.

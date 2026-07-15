@@ -38,7 +38,8 @@ Then ask: “Save this as a private Noteflix note?” Stop and wait for a clear 
 2. Never change the privacy fields or attempt a public save. The tool creates private notes only.
 3. On success, report the returned title and private Noteflix app link. Do not claim that Noteflix created flashcards, quizzes, videos, audio, images, or any other derived asset.
 4. If authentication is required, explain that the learner must connect Noteflix through OAuth, then retry only after authentication and with the same confirmed payload and `request_id`.
-5. If the result is uncertain or the call times out, do not issue a new request ID. Retry the same request at most once so idempotency can prevent duplicates, then report the uncertainty.
+5. If the tool reports `subscription_required`, explain that no note was created and that the connected account needs an active eligible Noteflix subscription. Do not retry automatically. After the learner subscribes or restores purchases in Noteflix and explicitly asks to retry, reuse the same confirmed payload and `request_id`.
+6. If the result is uncertain or the call times out, do not issue a new request ID. Retry the same request at most once so idempotency can prevent duplicates, then report the uncertainty.
 
 ## Boundaries
 

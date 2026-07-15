@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "noteflix-study-loop",
   "displayName": "Noteflix Study Loop",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Helps adult learners turn text supplied in the current request into source-faithful study guides, practice, quiz-first review, and study plans, then explicitly save approved results as private notes in Noteflix.",
   "author": {
     "name": "Noteflix",

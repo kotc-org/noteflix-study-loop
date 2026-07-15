@@ -8,7 +8,7 @@ claude plugin validate --strict ./noteflix-study-loop
 claude --plugin-dir ./noteflix-study-loop
 ```
 
-Paste the contents of `samples/cell-biology-notes.md` into the current Claude request for functional testing. The study skills do not require an account. The private-save cases require a Noteflix reviewer account connected through the normal OAuth flow; credentials can be supplied privately to the review team.
+Paste the contents of `samples/cell-biology-notes.md` into the current Claude request for functional testing. The study skills do not require an account. The private-save cases require an active eligible subscription on the Noteflix reviewer account connected through the normal OAuth flow; credentials can be supplied privately to the review team.
 
 ## Study-skill cases
 
@@ -43,6 +43,8 @@ Paste the contents of `samples/cell-biology-notes.md` into the current Claude re
 | Ambiguous reply | Reply “Looks interesting” | Does not call the tool and asks for an explicit decision |
 | Idempotent retry | Simulate a timeout after a confirmed call | Reuses the same request ID for at most one retry rather than creating a duplicate request |
 | Authentication | Save while disconnected | Starts or explains the Noteflix OAuth connection; never asks the learner to paste a password, API key, or token |
+| Ineligible subscription | Confirm a save using a connected account with no active eligible subscription | Returns `subscription_required`; creates no idempotency reservation and makes no Noteflix note request |
+| Entitlement outage | Make the internal subscription authority unavailable in an isolated test environment | Returns `subscription_check_unavailable`; fails closed and creates no note |
 | Private result | Inspect the created note in Noteflix | Note is private and no derived video, audio, image, podcast, flashcard, quiz, game, or other media asset was started |
 | Existing data | Ask the plugin to list or read existing notes | Declines because `notes:create` is the submitted connector's only data-action scope; `offline_access` adds no data access |
 | Media request | Ask the plugin to create or check a Noteflix video | Declines or explains that the directory plugin provides private text-note creation only; no media tool is called |
@@ -59,6 +61,7 @@ Paste the contents of `samples/cell-biology-notes.md` into the current Claude re
 - The confirmed Markdown is forwarded unchanged; the gateway does not segment it or synthesize summary/key-point fields.
 - OAuth and idempotency state are isolated in the named gateway Firestore database, and authenticated MCP limits are persistent per Noteflix account rather than shared source IP.
 - Consent identity is checked through Firebase Identity Toolkit without Firebase Auth administration or custom-token signing. The private-note write uses the dedicated gateway's Google OIDC identity against the internal Noteflix route.
+- Before idempotency, the gateway calls the service-identity-protected canonical Noteflix subscription preflight for the OAuth-bound Firebase UID and accepts only an exact same-UID premium response. The write endpoint repeats the canonical check; negative, unavailable, malformed, or mismatched results fail closed.
 - No video, audio, image, podcast, or other media-generation tool is present in the submitted plugin.
 - Privacy, support, security, license, sample data, changelog, and submission metadata are included.
 - All substantive plugin instructions are readable in the repository.

@@ -16,7 +16,7 @@ Noteflix Study Loop is a Claude plugin for adult and higher-education learners. 
 | `build-review-plan` | Time-bounded review plans with buffers and fallback actions |
 | `save-to-noteflix` | Explicitly preview, confirm, and save an artifact as a private Noteflix note |
 
-The submitted plugin exposes one remote MCP tool: `create_private_note`. Its only data-action OAuth scope is `notes:create`; it also requests the standard `offline_access` refresh scope so a connection can renew short-lived access without repeatedly asking the learner to sign in. It cannot list, read, search, update, publish, or delete existing notes.
+The submitted plugin exposes one remote MCP tool: `create_private_note`. Its only data-action OAuth scope is `notes:create`; it also requests the standard `offline_access` refresh scope so a connection can renew short-lived access without repeatedly asking the learner to sign in. It cannot list, read, search, update, publish, or delete existing notes. Creating a note through Claude requires an active eligible Noteflix subscription; the server checks the subscription for the Firebase UID bound to OAuth and denies the request before any write when it cannot verify eligibility.
 
 The connector and its OAuth flow use Noteflix's first-party endpoint at `https://noteflix.com/mcp`.
 
@@ -73,7 +73,7 @@ In a Claude Code session, use a natural-language prompt from above or explicitly
 /noteflix-study-loop:run-quiz-first-review
 ```
 
-The four study skills require no account. Testing the save flow requires a Noteflix account and completes the normal Noteflix OAuth flow; no API key or environment variable is required.
+The four study skills require no account. Testing the save flow requires an active eligible Noteflix subscription and completes the normal Noteflix OAuth flow; no API key or environment variable is required.
 
 ## Learning boundaries
 
