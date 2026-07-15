@@ -43,7 +43,7 @@ export function createNoteflixMcpServer(dependencies: {
       annotations: {
         title: "Create a private Noteflix note",
         readOnlyHint: false,
-        destructiveHint: true,
+        destructiveHint: false,
         idempotentHint: true,
         openWorldHint: true,
       },
@@ -51,9 +51,22 @@ export function createNoteflixMcpServer(dependencies: {
     async (untrustedInput) => {
       const parsed = inputSchema.safeParse(untrustedInput);
       if (!parsed.success) {
+        const invalidFields = [...new Set(
+          parsed.error.issues
+            .map((issue) => issue.path[0])
+            .filter((field): field is string | number => typeof field === "string" || typeof field === "number")
+            .map(String),
+        )];
         return {
           isError: true,
-          content: [{ type: "text" as const, text: "Noteflix did not create a note because the tool input was invalid." }],
+          content: [{
+            type: "text" as const,
+            text: `Noteflix did not create a note because ${
+              invalidFields.length > 0
+                ? `these fields were invalid: ${invalidFields.join(", ")}`
+                : "the tool input was invalid"
+            }. Review the tool schema and try again with the same request_id only if the intended content is unchanged.`,
+          }],
         };
       }
 
