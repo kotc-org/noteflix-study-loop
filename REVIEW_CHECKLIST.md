@@ -52,7 +52,8 @@ Paste the contents of `samples/cell-biology-notes.md` into the current Claude re
 - `.claude-plugin/plugin.json` is valid, uses a kebab-case ID, and describes the authenticated private-note capability.
 - Exactly five skills are present, each with narrow third-person trigger wording.
 - Root `.mcp.json` declares one remote HTTP server.
-- The remote server advertises and enforces OAuth, PKCE, protected-resource metadata, mandatory exact resource binding, Claude-only hosted callbacks or local loopback `/callback`, and `notes:create`.
+- The declared MCP URL is the first-party `https://noteflix.com/mcp` endpoint; OAuth metadata and consent remain on `noteflix.com`.
+- The remote server advertises and enforces OAuth, PKCE, protected-resource metadata, mandatory exact resource binding, Claude-only hosted callbacks or local loopback `/callback`, `notes:create`, and the `offline_access` refresh scope.
 - The consent screen displays the callback hostname and warns separately before returning to a local loopback client.
 - The connector exposes exactly one tool, `create_private_note`, with mutating, idempotent, and open-world annotations.
 - The confirmed Markdown is forwarded unchanged; the gateway does not segment it or synthesize summary/key-point fields.

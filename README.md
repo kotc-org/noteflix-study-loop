@@ -18,6 +18,8 @@ Noteflix Study Loop is a Claude plugin for adult and higher-education learners. 
 
 The submitted plugin exposes one remote MCP tool: `create_private_note`. Its only data-action OAuth scope is `notes:create`; it also requests the standard `offline_access` refresh scope so a connection can renew short-lived access without repeatedly asking the learner to sign in. It cannot list, read, search, update, publish, or delete existing notes.
 
+The connector and its OAuth flow use Noteflix's first-party endpoint at `https://noteflix.com/mcp`.
+
 ## Try it
 
 Paste your study text into the current request, or paste the bundled [`samples/cell-biology-notes.md`](samples/cell-biology-notes.md) as a self-contained test source.

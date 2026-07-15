@@ -8,7 +8,7 @@ The server is designed for Cloud Run but is not deployed by this package. It use
 
 | Interface | Contract |
 | --- | --- |
-| MCP resource | `https://noteflix-study-mcp-738470476706.us-central1.run.app/mcp` |
+| MCP resource | `https://noteflix.com/mcp` |
 | MCP transport | Stateless Streamable HTTP at `POST /mcp`; JSON responses |
 | OAuth discovery | `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource/mcp`, plus root PRM compatibility alias |
 | OAuth endpoints | `GET\|POST /authorize`, `POST /token`, `POST /register`, `POST /revoke` |

@@ -4,7 +4,7 @@ All notable changes to Noteflix Study Loop are documented here.
 
 ## 0.2.0 — 2026-07-15
 
-- Added a remote OAuth MCP connection with the narrow `notes:create` scope.
+- Added a remote OAuth MCP connection at the first-party `https://noteflix.com/mcp` endpoint with `notes:create` as its sole data-action scope and `offline_access` for refresh-token renewal.
 - Added `save-to-noteflix`, which requires explicit save intent, an exact private-note preview, and a separate confirmation before mutation.
 - Added idempotent private note creation and a returned Noteflix app link.
 - Updated privacy, security, support, and reviewer documentation for the authenticated service.
@@ -14,6 +14,7 @@ All notable changes to Noteflix Study Loop are documented here.
 - Isolated gateway security state in a named Firestore database and retained per-account MCP rate limits without a shared-IP throttle on authenticated traffic.
 - Removed gateway-generated note segments, summaries, and key points so only the confirmed payload is forwarded.
 - Replaced Firebase custom-token impersonation with public Identity Toolkit consent verification and a dedicated Google OIDC service-to-service note route.
+- Required exact first-party Origin validation before consent completion and moved all public OAuth/MCP metadata and consent traffic onto `noteflix.com`.
 
 ## 0.1.0 — 2026-07-15
 

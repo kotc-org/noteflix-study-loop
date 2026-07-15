@@ -13,6 +13,7 @@
 - **Website:** https://noteflix.com
 - **Support:** support@noteflix.com
 - **Repository:** https://github.com/kotc-org/noteflix-study-loop
+- **MCP endpoint:** https://noteflix.com/mcp
 - **Privacy policy:** https://github.com/kotc-org/noteflix-study-loop/blob/main/PRIVACY.md
 - **Support page:** https://github.com/kotc-org/noteflix-study-loop/blob/main/SUPPORT.md
 
@@ -40,6 +41,7 @@ The plugin does not inspect uploads, retrieve prior conversations, query Claude 
 
 - **Authentication:** OAuth with PKCE through Noteflix.
 - **Requested OAuth scopes:** `notes:create` and `offline_access`. `notes:create` is the sole data-action scope; `offline_access` permits refresh-token renewal and adds no Noteflix data access.
+- **Endpoint ownership:** The connector, OAuth metadata, and consent UI are served from the first-party `noteflix.com` domain and route only to Noteflix-operated backend services.
 - **Remote tool:** `create_private_note` only.
 - **Mutation:** Creates one private Noteflix note after explicit intent, exact-payload preview, and separate confirmation.
 - **Data sent:** Confirmed title, Markdown content, optional confirmed summary/key points, random idempotency request ID, and authenticated account identity.
