@@ -1,45 +1,63 @@
 # Submission readiness audit
 
-Status reflects the repository and related Noteflix code inspected on July 16, 2026. This file is an internal submission gate, not public listing copy.
+Status reflects the ChatGPT app, Noteflix backend, and live first-party surfaces inspected on July 16, 2026. This is an internal gate, not public listing copy.
 
-## Blocking contradictions
+## Implemented and verified locally
 
-1. **Age policy conflicts.** Root `README.md`, `PRIVACY.md`, and `SUBMISSION.md` say adults/higher education, not under 18, and not K–12. The in-progress consent copy and ChatGPT target say age 13+. Product terms and child/teen privacy handling were not found. Do not submit a 13+ claim until every surface and the legal/privacy obligations are aligned.
-2. **Claude-only/no-video documents conflict with the ChatGPT app.** Root `README.md`, `PRIVACY.md`, `SUPPORT.md`, `SECURITY.md`, `SUBMISSION.md`, and `REVIEW_CHECKLIST.md` describe Claude, one `create_private_note` tool, and no video generation. `server/README.md` also says “Noteflix Claude MCP gateway” and one tool. Those files cannot be used as the ChatGPT listing or privacy URL without a scoped rewrite or separate first-party ChatGPT pages.
-3. **Subscription upsell and stale brand language remains in runtime code.** `server/src/noteflix/client.ts` contains “create notes through Claude” and tells an ineligible user to “Subscribe or restore purchases.” The ChatGPT app must use neutral existing-account language with no subscribe, restore, upgrade, checkout, pricing, or plan-management prompt.
-4. **No verified terms document or URL.** No root terms file was found. A first-party terms URL must be published and verified rather than inferred.
-5. **Privacy URL is not ChatGPT/video ready.** The root policy mentions Anthropic/Claude, says no video is generated, and lacks the public derivative, readable slug, generation provider, and video deletion/storage disclosures.
+- Four-tool catalog: private note creation, allowance read, confirmed public-video generation, and exact-owner video status.
+- Exact OAuth UID binding, scope checks, PKCE, dynamic client registration policy, idempotency, fail-closed subscription checks, and per-user allowance accounting.
+- Wire-level `tools/list` emits each OAuth scheme both at top level and in the `_meta` compatibility mirror.
+- OAuth error redirects preserve `state` only for an exact validated callback; malformed or unregistered callbacks never receive a redirect.
+- Restricted-data checks run before note eligibility/idempotency/backend calls and before public-video allowance/provider calls. Static errors do not echo matched values or categories.
+- Public-video publication requires three literal confirmations and returns a readable first-party watch page, never a raw media URL.
+- Tool annotations match the current OpenAI definition: the public-video tool is not read-only, is not destructive because it does not delete or overwrite, is open-world because it publishes externally, and is idempotent for identical retries.
+- Public slug revocation, storage-prefix deletion, retry receipts, source-note deletion barriers, account deletion sweeps, worker write barriers, and retry-enabled late-upload cleanup are implemented with focused tests.
+- Firestore rules deny every client, including product admins, direct access to connector allowance/idempotency, slug, deletion receipt, and deletion tombstone control collections.
+- The submission packet defines exactly five positive and three negative scenarios using the deployed snake_case structured-output contract.
 
-## Data-deletion blockers
+## Live surfaces already verified
 
-1. **Underlying media deletion is not visible in the inspected video-delete path.** `functions/src/entrypoints/ai-notes.ts` deletes the video document and tombstones the public slug, but the inspected transaction does not delete the `storagePath` object. Public routing is revoked, yet physical media deletion cannot be claimed.
-2. **Account deletion does not visibly sweep public video data.** `shared/accountDeletion.ts` recursively deletes owned `aiNotes`, `notes`, folders, and selected account collections, but its inspected lists do not include the top-level `videos`, `videoGenerationJobs`, or public-video slug collection. Because public resolution reads video plus slug without consulting the source note, an end-to-end account-delete test or code fix is mandatory.
-3. **Storage/tombstone retention is unspecified.** No bounded retention for deleted video objects or public slug tombstones was verified. Publish an exact policy only after implementation and operations agree.
+- Website: `https://noteflix.com`
+- App information: `https://noteflix.com/openai-app`
+- Privacy: `https://noteflix.com/openai-app/privacy`
+- Terms: `https://noteflix.com/openai-app/terms`
+- Support: `https://noteflix.com/openai-app/support`
+- Current Cloud Run service: `noteflix-openai-mcp` in `us-central1`.
+- The Cloud Run service passed health, OAuth metadata, protected-resource metadata, CORS, 401 challenge, strict DCR failure, and synthetic DCR/authorization-code happy-path checks on its platform hostname.
+- The dedicated private reviewer credential passes Firebase password sign-in without MFA. Credentials remain in Secret Manager and must be copied only into the portal's private reviewer field.
+- Connector Firestore TTL policies are active in the isolated `noteflix-openai-mcp` database.
+- The production Cloud Logging bucket retains application logs for 30 days.
 
-## Deployment and review blockers
+## Remaining deployment gates
 
-- Final ChatGPT MCP hostname and deployed revision are not recorded in this package.
-- The OpenAI Apps domain-challenge value must come from the portal and be configured privately on the final host.
-- The exact ChatGPT OAuth callback must be verified from a real developer-mode/portal registration, even though the in-progress policy recognizes the current expected callback shape.
-- OpenAI organization identity verification and Apps Management write permission are not evidenced here.
-- A no-MFA reviewer account, private credentials, sample note/video IDs, starting allowance, and cleanup evidence must be prepared privately.
-- Production provider configuration must confirm whether note-derived narration text goes to ElevenLabs, Google, or both in fallback order; public disclosures must match reality.
-- Exactly five positive and three negative production tests remain to be recorded.
+1. Merge the backend hardening branch only after the full Functions test suite, TypeScript build, and Firestore rules emulator pass; deploy Functions and Firestore rules from `develop` and verify the new storage-finalize function is active.
+2. Merge and deploy the matching live legal disclosure only after backend enforcement is live. Re-fetch all four first-party URLs and verify the deployed bundle hash.
+3. Merge and deploy the gateway hardening branch, then repeat production MCP/OAuth/tool-list conformance checks against the deployed revision.
+4. Add the exact `chatgpt.noteflix.com` CNAME required by the Cloud Run domain mapping and wait for a valid certificate. The public listing must use `https://chatgpt.noteflix.com/mcp`, not the temporary Cloud Run hostname.
+5. Obtain the exact OpenAI Apps domain-challenge value from the portal, store it as a secret/config value, deploy it, and verify the challenge route returns only that value.
 
-## Non-blocking implementation naming
+## Remaining review-evidence gates
 
-Internal backend routes, fields, and counters still use compatibility names such as `claude-mcp`, `claude-media`, and `claudeMediaAllowanceState`. These names are not automatically a user-facing policy failure if they remain internal and both ChatGPT and Claude deliberately share the same per-user allowance. They should be generalized when practical, and no Claude branding should leak into ChatGPT tool descriptions, errors, consent, listing copy, URLs, or reviewer instructions.
+- Confirm the submitter's verified OpenAI identity and Apps Management write permission in the same organization/project used for submission.
+- Confirm the exact callback registered by the real OpenAI portal item; the server must accept that exact trusted callback and continue rejecting every unregistered callback.
+- Create or verify the reviewer account's harmless private sample note, deterministic ready-video fixture, separate-account denial fixture, readable watch URL, and starting allowance. Keep fixture IDs private.
+- Run the exact five positive and three negative scenarios against production on ChatGPT web and mobile. Record tool calls, structured results, exact-UID evidence, allowance before/after, signed-out public-watch behavior, signed-out private-note denial, and cleanup.
+- Verify a created private note contains no automatic derived media; one accepted public generation changes only the connected user's allowance; idempotent replay does not double-charge; failure/deletion refunds a reservation.
+- Verify video deletion, source-note deletion, account deletion, failed cleanup retry, and a simulated late Storage finalize against the deployed revision.
+- Upload and inspect the verified 1024 × 1024 Noteflix icon, enter the listing/CSP/country fields, complete the questionnaire, and submit. Record the submission ID, timestamp, organization/project, endpoint, revision, challenge result, asset hash, and resulting portal status.
 
-## Safe decisions already reflected in the package
+## Internal compatibility naming
 
-- The listing uses a neutral existing-account requirement and contains no digital-subscription upsell.
-- Private note creation and public video publication are separated; a created note never automatically becomes a video.
-- The public-video prompt requires generation/credit, public-discoverability, and source-rights confirmations.
-- All allowance and mutation language binds to the exact OAuth-connected account.
-- Availability selects all portal countries while identifying the developer's stated USA base without inventing a legal-entity claim.
-- Existing verified Noteflix icon assets are reused; no OpenAI endorsement or trademark claim is fabricated.
-- Credentials and secrets stay out of source control.
+Some first-party backend routes and counters retain internal compatibility names such as `claude-mcp`, `claude-media`, and `claudeMediaAllowanceState` because Claude and ChatGPT share the same exact-user product allowance. These internal names do not appear in ChatGPT tool descriptions, OAuth consent copy, listing copy, public URLs, or reviewer instructions.
 
-## Root-file decision
+## No-ship conditions
 
-No root privacy, support, submission, terms, or README file was changed in this pass. That preserves the existing Claude submission and avoids silently replacing its adult-only/no-video policy with an incompatible ChatGPT policy. The ChatGPT app needs separate live first-party policy/support/terms pages or an intentional, product-wide reconciliation before submission.
+Do not submit while any of these is true:
+
+- the custom first-party MCP hostname lacks a valid certificate;
+- the portal challenge is unverified;
+- production backend, legal disclosure, and gateway behavior do not match;
+- a reviewer fixture or no-MFA sign-in is missing;
+- a production deletion/storage test fails;
+- the exact eight reviewer scenarios have not passed; or
+- identity verification or Apps Management write permission is absent.

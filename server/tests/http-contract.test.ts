@@ -1,5 +1,5 @@
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createApp } from "../src/app.js";
 import { testConfig } from "./fixtures.js";
@@ -7,6 +7,31 @@ import { testConfig } from "./fixtures.js";
 function contractApp() {
   const inertDb = {} as never;
   return createApp(testConfig(), { db: inertDb });
+}
+
+function authorizationClientDb() {
+  const callback = "https://chatgpt.com/connector/oauth/state-preservation-test";
+  const storedClient = {
+    client_id: "state-preservation-client",
+    client_id_issued_at: Math.floor(Date.now() / 1000),
+    redirect_uris: [callback],
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+    token_endpoint_auth_method: "none",
+    registrationExpiresAtMs: Date.now() + 60_000,
+  };
+  const get = vi.fn().mockResolvedValue({
+    exists: true,
+    data: () => storedClient,
+  });
+  return {
+    callback,
+    db: {
+      collection: vi.fn().mockReturnValue({
+        doc: vi.fn().mockReturnValue({ get }),
+      }),
+    } as never,
+  };
 }
 
 describe("remote MCP HTTP contract", () => {
@@ -45,6 +70,45 @@ describe("remote MCP HTTP contract", () => {
     expect(response.headers["www-authenticate"]).toContain(
       'resource_metadata="http://localhost:8080/.well-known/oauth-protected-resource/mcp"',
     );
+  });
+
+  it("preserves OAuth state on post-validation PKCE errors without opening redirects", async () => {
+    const { callback, db } = authorizationClientDb();
+    const app = createApp(testConfig(), { db });
+    const common = {
+      response_type: "code",
+      client_id: "state-preservation-client",
+      redirect_uri: callback,
+      state: "synthetic-state-value",
+    };
+
+    const missing = await request(app).get("/authorize").query(common);
+    expect(missing.status).toBe(302);
+    const missingLocation = new URL(missing.headers.location as string);
+    expect(`${missingLocation.origin}${missingLocation.pathname}`).toBe(callback);
+    expect(missingLocation.searchParams.get("error")).toBe("invalid_request");
+    expect(missingLocation.searchParams.get("state")).toBe(common.state);
+
+    const plain = await request(app)
+      .post("/authorize")
+      .type("form")
+      .send({
+        ...common,
+        code_challenge: "synthetic-code-challenge",
+        code_challenge_method: "plain",
+      });
+    expect(plain.status).toBe(302);
+    const plainLocation = new URL(plain.headers.location as string);
+    expect(`${plainLocation.origin}${plainLocation.pathname}`).toBe(callback);
+    expect(plainLocation.searchParams.get("error")).toBe("invalid_request");
+    expect(plainLocation.searchParams.get("state")).toBe(common.state);
+
+    const unregistered = await request(app).get("/authorize").query({
+      ...common,
+      redirect_uri: "https://attacker.test/callback",
+    });
+    expect(unregistered.status).toBe(400);
+    expect(unregistered.headers).not.toHaveProperty("location");
   });
 
   it("serves only the configured OpenAI domain-verification token", async () => {

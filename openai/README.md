@@ -10,8 +10,8 @@ Use these files together:
 - [`DATA_FLOW_AND_PRIVACY.md`](DATA_FLOW_AND_PRIVACY.md) — exact-account data flow, privacy disclosure, retention, deletion, and processors;
 - [`ASSETS.md`](ASSETS.md) — verified first-party Noteflix image inventory;
 - [`SUBMISSION_CHECKLIST.md`](SUBMISSION_CHECKLIST.md) — build, deployment, portal, and review gates; and
-- [`READINESS_AUDIT.md`](READINESS_AUDIT.md) — contradictions and blockers that must not be concealed from review.
+- [`READINESS_AUDIT.md`](READINESS_AUDIT.md) — remaining production, evidence, and portal gates that must not be concealed from review.
 
-The existing root documents describe the separate Claude submission. They were intentionally left unchanged because they currently say the product is adult-only and that the submitted integration has no video tools. Those statements cannot safely be repurposed as the ChatGPT app's public privacy, support, or terms copy.
+The repository root documents describe the separate Claude submission and remain scoped to it. The ChatGPT app uses its own first-party information, privacy, terms, and support pages under `https://noteflix.com/openai-app`; production deployment must keep those pages synchronized with this package.
 
 No reviewer credentials, OAuth tokens, challenge tokens, API keys, legal-entity assertions, or unverified vendor promises belong in this directory.

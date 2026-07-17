@@ -4,16 +4,18 @@
 
 | Field | Submission value |
 |---|---|
-| App name | Noteflix Study & Video |
+| Plugin name | Noteflix Study & Video |
 | Category | Education |
 | Developer location | United States of America |
-| Country availability | Select every country made available by the submission portal. Actual use remains subject to ChatGPT Apps and Noteflix service availability in the user's location. |
+| Country availability | Select every portal country where both ChatGPT plugins and Noteflix are available. The scoped terms support worldwide availability subject to local law and service availability. |
+| Localization | English (United States) |
 | Website | https://noteflix.com |
-| Support contact | support@noteflix.com |
-| Privacy URL | Use the live first-party Noteflix privacy URL only after it includes the ChatGPT, private-note, public-video, processor, retention, and deletion disclosures in `DATA_FLOW_AND_PRIVACY.md`. |
-| Terms URL | Verify and publish a first-party Noteflix terms URL before submission; no verified terms document exists in this repository. |
+| Support URL | https://noteflix.com/openai-app/support |
+| Support email | support@noteflix.com |
+| Privacy URL | https://noteflix.com/openai-app/privacy |
+| Terms URL | https://noteflix.com/openai-app/terms |
 | Authentication | OAuth with PKCE through Noteflix |
-| MCP endpoint | Enter the deployed first-party HTTPS `/mcp` URL after production verification. Do not copy the Claude endpoint from older documentation without checking the live ChatGPT deployment. |
+| MCP endpoint | https://chatgpt.noteflix.com/mcp |
 | Audience | General audience, age 13 and older; not directed to children under 13 |
 | Existing-account requirement | An existing eligible Noteflix account is required for account actions. The app does not sell, promote, or link to subscriptions, upgrades, prices, checkout, or credits inside ChatGPT. |
 
@@ -35,7 +37,7 @@ For video, the app can read the connected account's monthly public-video allowan
 
 All account actions are bound to the exact Firebase UID authenticated in the Noteflix OAuth grant. A current eligible Noteflix account is required and every entitlement check fails closed. The app does not use a service account's subscription or a different user's allowance. It does not offer purchases, pricing, checkout, plan management, subscription restoration, or upgrade links inside ChatGPT.
 
-The app is intended for general audiences age 13 and older and is not directed to children under 13. It supports studying and explanation; it does not claim to predict grades and should not provide answers to live, proctored, or graded assessments.
+The app is intended for general audiences age 13 and older and is not directed to children under 13. It supports study-note organization and explanation and does not claim to predict grades.
 
 ## Feature and permission summary
 
@@ -48,6 +50,15 @@ The app is intended for general audiences age 13 and older and is not directed t
 
 `offline_access` may also be requested so short-lived access can renew without repeated sign-in. It adds no permission to read or change Noteflix product data.
 
+## Tool annotation justifications
+
+| Tool | `readOnlyHint` | `destructiveHint` | `openWorldHint` | `idempotentHint` | Justification |
+|---|---:|---:|---:|---:|---|
+| `create_private_note` | false | false | false | true | Creates one private record in the connected account; it does not delete/overwrite data or publish externally. Identical retries reuse one receipt. |
+| `get_video_allowance` | true | false | false | true | Reads a minimized account-bound allowance snapshot and makes no external change. |
+| `create_public_note_video` | false | false | true | true | Publishes externally visible content and consumes one finite allowance unit, but does not delete or overwrite user data. The open-world annotation and all three server-enforced confirmations communicate the consequence. Identical retries do not create or charge twice. |
+| `get_video_status` | true | false | false | true | Reads status for one exact-account video and makes no external change. |
+
 ## Starter prompts
 
 1. “Turn the text below into a concise study note. Show me the exact title and Markdown you would save privately to Noteflix, then wait for my approval.”
@@ -57,7 +68,9 @@ The app is intended for general audiences age 13 and older and is not directed t
 
 Do not use starter copy that says “subscribe,” “upgrade,” “buy,” “restore purchases,” “manage plan,” or “get more credits.”
 
-## Release notes — 1.0.0
+## Release notes — initial submission 1.0.0
+
+Initial submission of the MCP-backed Noteflix Study & Video plugin. Reviewer access uses the dedicated no-MFA eligible account and fixtures supplied in the portal's private instructions.
 
 - Added exact-user Noteflix OAuth with PKCE and per-tool least-privilege scopes.
 - Added confirmed private-note creation with UUID idempotency and no automatic derived media.
@@ -66,10 +79,10 @@ Do not use starter copy that says “subscribe,” “upgrade,” “buy,” “
 - Added readable public watch-page slugs while keeping the source note private and excluding raw media URLs from tool results.
 - Added read-only video status checks and privacy-safe structured results.
 - Added fail-closed subscription and exact-UID binding; the app never consumes another user's or a service account's allowance.
-- Added age-13+ general-audience and live-assessment safety boundaries.
+- Added age-13+ general-audience disclosures and restricted-data boundaries.
 
 ## Portal notes
 
 - Publisher display name must match the identity verified in the same OpenAI organization. Do not add “official,” “OpenAI,” “ChatGPT,” or any endorsement claim to the app name.
-- Submit as an MCP-backed app without a custom web component unless a component is added and reviewed separately. If there is no component, there are no iframe resource domains to declare; do not add wildcard CSP entries.
+- Submit as an MCP-backed app without a custom web component. Enter a deny-all component CSP because this release has no iframe or widget fetches: `connectDomains: []`, `resourceDomains: []`, and `frameDomains: []`. Do not add wildcard CSP entries.
 - Supply demo credentials and sample IDs only through the portal's private reviewer fields, never in public listing text or this repository.
