@@ -2,21 +2,83 @@ import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/share
 import { InvalidClientMetadataError, InvalidScopeError, InvalidTargetError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 
 export const NOTES_CREATE_SCOPE = "notes:create";
+export const VIDEOS_CREATE_SCOPE = "videos:create";
+export const VIDEOS_READ_SCOPE = "videos:read";
+export const VIDEOS_PUBLISH_SCOPE = "videos:publish";
 export const OFFLINE_ACCESS_SCOPE = "offline_access";
-export const SUPPORTED_SCOPES = [NOTES_CREATE_SCOPE, OFFLINE_ACCESS_SCOPE] as const;
+export const ACTION_SCOPES = [
+  NOTES_CREATE_SCOPE,
+  VIDEOS_CREATE_SCOPE,
+  VIDEOS_READ_SCOPE,
+  VIDEOS_PUBLISH_SCOPE,
+] as const;
+export const SUPPORTED_SCOPES = [...ACTION_SCOPES, OFFLINE_ACCESS_SCOPE] as const;
 const CLAUDE_HOSTED_CALLBACK = "https://claude.ai/api/mcp/auth_callback";
-const CLAUDE_CODE_LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1"]);
+const CHATGPT_CALLBACK_ORIGIN = "https://chatgpt.com";
+const CHATGPT_CALLBACK_PATH = /^\/connector\/oauth\/[A-Za-z0-9_-]{1,200}$/;
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+type TrustedCallback = "chatgpt" | "claude" | "loopback";
+
+function classifyTrustedCallback(url: URL): TrustedCallback | undefined {
+  if (url.username || url.password || url.hash || url.search) return undefined;
+  if (url.href === CLAUDE_HOSTED_CALLBACK) return "claude";
+  if (
+    url.origin === CHATGPT_CALLBACK_ORIGIN &&
+    CHATGPT_CALLBACK_PATH.test(url.pathname)
+  ) {
+    return "chatgpt";
+  }
+  if (
+    url.protocol === "http:" &&
+    LOOPBACK_HOSTS.has(url.hostname) &&
+    url.pathname === "/callback"
+  ) {
+    return "loopback";
+  }
+  return undefined;
+}
 
 export function normalizeScopes(requested: string[] | undefined): string[] {
-  const scopes = requested && requested.length > 0 ? [...new Set(requested)] : [NOTES_CREATE_SCOPE];
-  if (!scopes.includes(NOTES_CREATE_SCOPE)) {
-    throw new InvalidScopeError(`The ${NOTES_CREATE_SCOPE} scope is required`);
-  }
+  const scopes = requested && requested.length > 0 ? [...new Set(requested)] : [...ACTION_SCOPES];
   const invalid = scopes.filter((scope) => !SUPPORTED_SCOPES.includes(scope as (typeof SUPPORTED_SCOPES)[number]));
   if (invalid.length > 0) {
     throw new InvalidScopeError(`Unsupported scope: ${invalid[0]}`);
   }
+  if (!scopes.some((scope) => ACTION_SCOPES.includes(scope as (typeof ACTION_SCOPES)[number]))) {
+    throw new InvalidScopeError("At least one Noteflix action scope is required");
+  }
   return SUPPORTED_SCOPES.filter((scope) => scopes.includes(scope));
+}
+
+export function trustedClientDisplayName(redirectUri: string): string {
+  let url: URL;
+  try {
+    url = new URL(redirectUri);
+  } catch {
+    throw new InvalidClientMetadataError("Redirect URIs must be valid absolute URLs");
+  }
+  switch (classifyTrustedCallback(url)) {
+    case "chatgpt": return "ChatGPT";
+    case "claude": return "Claude";
+    case "loopback": return "Local MCP client";
+    default:
+      throw new InvalidClientMetadataError("Redirect URI is not a trusted ChatGPT, Claude, or loopback callback");
+  }
+}
+
+export function defaultScopesForRedirectUri(redirectUri: string): string[] {
+  let url: URL;
+  try {
+    url = new URL(redirectUri);
+  } catch {
+    throw new InvalidClientMetadataError("Redirect URIs must be valid absolute URLs");
+  }
+  const callback = classifyTrustedCallback(url);
+  if (!callback) {
+    throw new InvalidClientMetadataError("Redirect URI is not a trusted ChatGPT, Claude, or loopback callback");
+  }
+  return callback === "chatgpt" ? [...ACTION_SCOPES] : [NOTES_CREATE_SCOPE];
 }
 
 export function requireExactResource(requested: URL | undefined, configured: URL): URL {
@@ -40,14 +102,9 @@ export function validateRegisteredClient(client: Omit<OAuthClientInformationFull
     if (url.username || url.password || url.hash || url.search) {
       throw new InvalidClientMetadataError("Redirect URIs must not contain credentials, query strings, or fragments");
     }
-    const hostedClaudeCallback = url.href === CLAUDE_HOSTED_CALLBACK;
-    const loopbackCallback =
-      url.protocol === "http:" &&
-      CLAUDE_CODE_LOOPBACK_HOSTS.has(url.hostname) &&
-      url.pathname === "/callback";
-    if (!hostedClaudeCallback && !loopbackCallback) {
+    if (!classifyTrustedCallback(url)) {
       throw new InvalidClientMetadataError(
-        "Redirect URIs must be an exact Claude hosted callback or an HTTP loopback /callback URL",
+        "Redirect URIs must be an exact ChatGPT or Claude callback, or an HTTP loopback /callback URL",
       );
     }
   }

@@ -16,7 +16,7 @@ import { NoteflixClient, type ServiceIdentityProvider } from "./noteflix/client.
 import { FirestoreOAuthStore } from "./oauth/firestore-store.js";
 import { IdentityToolkitVerifier, type NoteflixIdentityVerifier } from "./oauth/identity.js";
 import { NoteflixOAuthProvider, uidFromAuthInfo } from "./oauth/provider.js";
-import { NOTES_CREATE_SCOPE, SUPPORTED_SCOPES } from "./oauth/policy.js";
+import { SUPPORTED_SCOPES } from "./oauth/policy.js";
 import { FirestoreIdempotencyStore, IdempotencyCoordinator } from "./persistence/idempotency.js";
 import { FirestoreFixedWindowRateLimiter, persistentMcpRateLimit } from "./persistence/rate-limit.js";
 
@@ -69,9 +69,19 @@ export function createApp(config: AppConfig, runtime: RuntimeDependencies) {
   });
 
   app.get("/health", (_req, res) => res.status(200).json({ status: "ok" }));
+  app.get("/.well-known/openai-apps-challenge", (_req, res) => {
+    if (!config.openaiAppsChallengeToken) {
+      return res.status(404).type("text/plain").send("not_configured");
+    }
+    return res
+      .set("Cache-Control", "no-store")
+      .type("text/plain")
+      .status(200)
+      .send(config.openaiAppsChallengeToken);
+  });
   app.get("/", (_req, res) =>
     res.status(200).json({
-      name: "Noteflix Study Loop MCP",
+      name: "Noteflix Study & Video MCP",
       resource: config.mcpResourceUrl.href,
       documentation: config.serviceDocumentationUrl.href,
     }),
@@ -100,7 +110,7 @@ export function createApp(config: AppConfig, runtime: RuntimeDependencies) {
       resourceServerUrl: config.mcpResourceUrl,
       serviceDocumentationUrl: config.serviceDocumentationUrl,
       scopesSupported: [...SUPPORTED_SCOPES],
-      resourceName: "Noteflix Study Loop",
+      resourceName: "Noteflix Study & Video",
       authorizationOptions: {
         rateLimit: {
           windowMs: 15 * 60 * 1000,
@@ -135,7 +145,7 @@ export function createApp(config: AppConfig, runtime: RuntimeDependencies) {
     authorization_servers: [config.publicBaseUrl.href],
     scopes_supported: [...SUPPORTED_SCOPES],
     bearer_methods_supported: ["header"],
-    resource_name: "Noteflix Study Loop",
+    resource_name: "Noteflix Study & Video",
     resource_documentation: config.serviceDocumentationUrl.href,
   };
   app.get("/.well-known/oauth-protected-resource", (_req, res) =>
@@ -144,7 +154,7 @@ export function createApp(config: AppConfig, runtime: RuntimeDependencies) {
 
   const bearer = requireBearerAuth({
     verifier: provider,
-    requiredScopes: [NOTES_CREATE_SCOPE],
+    requiredScopes: [],
     resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(config.mcpResourceUrl),
   });
 
@@ -169,9 +179,16 @@ export function createApp(config: AppConfig, runtime: RuntimeDependencies) {
       const uid = uidFromAuthInfo(req.auth);
       const server = createNoteflixMcpServer({
         uid,
+        scopes: req.auth?.scopes ?? [],
         config,
         noteflixClient,
         idempotency,
+        generationRateLimit: () =>
+          persistentLimiter.consume(
+            `video-create:${uid}`,
+            config.videoCreateRateLimitPerHour,
+            60 * 60 * 1000,
+          ),
       });
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,

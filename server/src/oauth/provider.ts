@@ -22,10 +22,11 @@ import { opaqueToken } from "../security/crypto.js";
 import type { OAuthStore, StoredTokenRecord } from "./firestore-store.js";
 import type { NoteflixIdentityVerifier } from "./identity.js";
 import {
+  defaultScopesForRedirectUri,
   normalizeScopes,
-  NOTES_CREATE_SCOPE,
   OFFLINE_ACCESS_SCOPE,
   requireExactResource,
+  trustedClientDisplayName,
   validateRegisteredClient,
 } from "./policy.js";
 
@@ -59,12 +60,16 @@ export class NoteflixOAuthProvider implements OAuthServerProvider {
     if (!client.redirect_uris.includes(params.redirectUri)) {
       throw new InvalidRequestError("redirect_uri is not registered for this client");
     }
-    const scopes = normalizeScopes(params.scopes);
+    const scopes = normalizeScopes(
+      params.scopes && params.scopes.length > 0
+        ? params.scopes
+        : defaultScopesForRedirectUri(params.redirectUri),
+    );
     const resource = requireExactResource(params.resource, this.config.mcpResourceUrl);
     const requestToken = opaqueToken();
     const record = {
       clientId: client.client_id,
-      clientName: client.client_name?.trim() || "Claude",
+      clientName: trustedClientDisplayName(params.redirectUri),
       redirectUri: params.redirectUri,
       ...(params.state ? { state: params.state } : {}),
       scopes,
@@ -171,10 +176,7 @@ export class NoteflixOAuthProvider implements OAuthServerProvider {
     resource?: URL,
   ): Promise<OAuthTokens> {
     const target = requireExactResource(resource, this.config.mcpResourceUrl);
-    const requested = normalizeScopes(scopes);
-    const nextScopes = requested.includes(OFFLINE_ACCESS_SCOPE)
-      ? requested
-      : [...requested, OFFLINE_ACCESS_SCOPE];
+    const nextScopes = !scopes || scopes.length === 0 ? undefined : normalizeScopes(scopes);
     const nextRefreshToken = opaqueToken();
     const rotated = await this.clientsStore.rotateRefreshToken(
       refreshToken,
@@ -280,11 +282,13 @@ export class NoteflixOAuthProvider implements OAuthServerProvider {
 
 export function uidFromAuthInfo(auth: AuthInfo | undefined): string {
   const uid = auth?.extra?.uid;
-  if (typeof uid !== "string" || uid.length === 0) {
+  if (
+    typeof uid !== "string" ||
+    uid.length === 0 ||
+    uid.length > 128 ||
+    uid.trim() !== uid
+  ) {
     throw new InvalidTokenError("The access token has no Noteflix user binding");
-  }
-  if (!auth?.scopes.includes(NOTES_CREATE_SCOPE)) {
-    throw new InvalidTokenError("The access token cannot create notes");
   }
   return uid;
 }

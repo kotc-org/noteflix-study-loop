@@ -59,7 +59,7 @@ export interface OAuthStore extends OAuthRegisteredClientsStore {
     rawOldToken: string,
     rawNewToken: string,
     clientId: string,
-    scopes: string[],
+    scopes: string[] | undefined,
     resource: string,
   ): Promise<StoredTokenRecord>;
   revoke(rawToken: string, clientId: string): Promise<void>;
@@ -248,7 +248,7 @@ export class FirestoreOAuthStore implements OAuthStore {
     rawOldToken: string,
     rawNewToken: string,
     clientId: string,
-    scopes: string[],
+    scopes: string[] | undefined,
     resource: string,
   ): Promise<StoredTokenRecord> {
     const oldRef = this.db.collection(this.names.refresh).doc(hashOpaque(rawOldToken));
@@ -261,13 +261,14 @@ export class FirestoreOAuthStore implements OAuthStore {
       if (!isLive(old, now) || old.clientId !== clientId || old.resource !== resource) {
         throw new InvalidGrantError("Refresh token is invalid or expired");
       }
-      if (scopes.some((scope) => !old.scopes.includes(scope))) {
+      const nextScopes = scopes ?? old.scopes;
+      if (nextScopes.some((scope) => !old.scopes.includes(scope))) {
         throw new InvalidGrantError("Refresh scope exceeds the original grant");
       }
       const next: StoredTokenRecord = {
         clientId,
         uid: old.uid,
-        scopes,
+        scopes: nextScopes,
         resource,
         createdAtMs: now,
         expiresAtMs: now + this.config.refreshTokenTtlSeconds * 1000,

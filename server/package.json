@@ -1,8 +1,8 @@
 {
-  "name": "@noteflix/claude-mcp-gateway",
-  "version": "0.3.0",
+  "name": "@noteflix/openai-mcp-gateway",
+  "version": "1.0.0",
   "private": true,
-  "description": "OAuth 2.1 protected MCP gateway for creating private Noteflix notes from Claude.",
+  "description": "OAuth 2.1 MCP gateway for private Noteflix notes and separately confirmed public study videos.",
   "type": "module",
   "engines": {
     "node": ">=20 <21"

@@ -26,14 +26,18 @@ export function buildConsentHtml(
   const clientName = escapeHtml(view.clientName);
   const callbackHostname = escapeHtml(view.callbackHostname);
   const callbackNotice = view.loopbackCallback
-    ? `<p class="warning"><strong>Local callback:</strong> after approval, this browser returns to <code>${callbackHostname}</code> on this device. Approve only if you started this connection in Claude.</p>`
+    ? `<p class="warning"><strong>Local callback:</strong> after approval, this browser returns to <code>${callbackHostname}</code> on this device. Approve only if you started this Noteflix connection in a local app.</p>`
     : `<p class="callback">After approval, this browser returns to <strong>${callbackHostname}</strong>.</p>`;
+  const scopeLabels: Record<string, string> = {
+    "notes:create": "Create private notes in this Noteflix account",
+    "videos:create": "Start video generation for notes in this Noteflix account",
+    "videos:read": "Read video progress and results from this Noteflix account",
+    "videos:publish": "Publish generated videos so anyone with the link can watch",
+    offline_access: "Keep this Noteflix connection active",
+  };
   const scopeItems = view.scopes
     .map((scope) => {
-      const label =
-        scope === "notes:create"
-          ? "Create private notes in your Noteflix account"
-          : "Allow Claude to refresh this connection";
+      const label = scopeLabels[scope] ?? "Use this Noteflix permission";
       return `<li><strong>${escapeHtml(label)}</strong><span>${escapeHtml(scope)}</span></li>`;
     })
     .join("");
@@ -47,7 +51,7 @@ export function buildConsentHtml(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Connect Noteflix to Claude</title>
+  <title>Connect Noteflix</title>
   <style nonce="${nonce}">
     :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
     body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #090b10; color: #f8fafc; }
@@ -77,8 +81,9 @@ export function buildConsentHtml(
 <body>
   <main>
     <div class="brand"><span aria-hidden="true">N</span> NOTEFLIX</div>
-    <h1>Connect ${clientName}</h1>
-    <p>Sign in to Noteflix, then choose whether Claude may use the permissions below. Notes created through this connection are always private.</p>
+    <h1>Connect Noteflix to ${clientName}</h1>
+    <p>Sign in to Noteflix and review these permissions. They apply only to the exact Noteflix account shown below. An active Noteflix subscription is required for note and video actions.</p>
+    <p>Notes created through this connection stay private. Generated videos are public only when the public-video permission is used.</p>
     ${callbackNotice}
     <ul>${scopeItems}</ul>
     <section id="signin">
@@ -98,7 +103,7 @@ export function buildConsentHtml(
       </div>
     </section>
     <p id="error" role="alert"></p>
-    <p class="fine">Noteflix never shares your password with Claude. This screen grants only the permissions listed above.</p>
+    <p class="fine">Noteflix never shares your password with the connected app. This screen grants only the permissions listed above. This connected experience is intended for people age 13 and older.</p>
   </main>
   <script type="module" nonce="${nonce}">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -117,7 +122,7 @@ export function buildConsentHtml(
     onAuthStateChanged(auth, (user) => {
       signin.hidden = Boolean(user);
       decision.hidden = !user;
-      account.textContent = user ? "Signed in as " + (user.email || "your Noteflix account") : "";
+      account.textContent = user ? "Signed in as " + (user.email || "your Noteflix account") + ". This connection can act only on this account." : "";
     });
 
     document.querySelector("#email-form").addEventListener("submit", async (event) => {

@@ -8,7 +8,7 @@ import { testConfig } from "./fixtures.js";
 describe("consent endpoint security", () => {
   it("requires the exact PUBLIC_BASE_URL origin before parsing the completion body", async () => {
     const completeConsent = vi.fn().mockResolvedValue({
-      redirectUrl: "https://claude.ai/api/mcp/auth_callback?code=safe",
+      redirectUrl: "https://chatgpt.com/connector/oauth/callback_123?code=safe",
     });
     const provider = {
       completeConsent,
@@ -49,7 +49,7 @@ describe("consent endpoint security", () => {
       .send(body);
     expect(sameOrigin.status).toBe(200);
     expect(sameOrigin.body).toEqual({
-      redirect_url: "https://claude.ai/api/mcp/auth_callback?code=safe",
+      redirect_url: "https://chatgpt.com/connector/oauth/callback_123?code=safe",
     });
     expect(completeConsent).toHaveBeenCalledOnce();
     expect(completeConsent).toHaveBeenCalledWith({
