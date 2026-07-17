@@ -71,8 +71,9 @@ Do not mark the app ready merely because the portal accepts a draft. Every block
 ## OpenAI organization and portal
 
 - [ ] The individual or business identity is verified in the same OpenAI organization/project used for submission.
-- [ ] The submitter has Apps Management write permission.
-- [ ] Create the portal item as an MCP-backed app and enter the final production endpoint/authentication configuration.
+- [ ] The submitter has Apps Management Write (`api.apps.write`) and Read (`api.apps.read`) permission.
+- [ ] The submitting OpenAI project uses global rather than EU data residency; EU-residency projects cannot submit this MCP-backed app.
+- [ ] Create the portal item using **Create plugin → With MCP** for this app-only plugin and enter the final production endpoint/authentication configuration.
 - [ ] Tool scan completes with no unexplained extra tools, schemas, permissions, domains, or unsafe descriptions.
 - [ ] Country availability, category, logo, descriptions, starter prompts, privacy, terms, support, release notes, and private demo instructions are entered exactly from the verified package.
 - [ ] Submit for review only after every blocker in `READINESS_AUDIT.md` is closed or the product behavior and public policy are corrected together.
