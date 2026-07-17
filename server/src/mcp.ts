@@ -14,6 +14,7 @@ import {
   getVideoStatusInputSchema,
   publicVideoSlugSchema,
 } from "./noteflix/input.js";
+import { installToolSecuritySchemeCompatibility } from "./mcp-compat.js";
 import {
   NOTES_CREATE_SCOPE,
   VIDEOS_CREATE_SCOPE,
@@ -22,6 +23,7 @@ import {
 } from "./oauth/policy.js";
 import type { IdempotencyCoordinator } from "./persistence/idempotency.js";
 import { IdempotencyError, privateNoteInputHash } from "./persistence/idempotency.js";
+import { containsRestrictedData } from "./security/restricted-data.js";
 
 const createNoteOutputSchema = z.object({
   status: z.literal("created"),
@@ -170,7 +172,7 @@ export function createNoteflixMcpServer(dependencies: {
     {
       title: "Create a private Noteflix note",
       description:
-        "Creates one private note in the exact OAuth-connected user's real Noteflix library. Call only after the user explicitly asks to save the exact title and Markdown content. The note remains private and is not published, shared, or rendered into a video. Requires an existing eligible Noteflix account. Safe retries must reuse the same request_id with identical content.",
+        "Creates one private note in the exact OAuth-connected user's real Noteflix library. Call only after the user explicitly asks to save the exact title and Markdown content. Never send payment-card data, identifiable health information, government identifiers, passwords, API keys, authentication tokens, or verification codes. The note remains private and is not published, shared, or rendered into a video. Requires an existing eligible Noteflix account. Safe retries must reuse the same request_id with identical content.",
       inputSchema: createNoteInputSchema,
       outputSchema: createNoteOutputSchema,
       annotations: {
@@ -212,6 +214,33 @@ export function createNoteflixMcpServer(dependencies: {
                 ? `these fields were invalid: ${invalidFields.join(", ")}`
                 : "the tool input was invalid"
             }.`,
+          }],
+        };
+      }
+
+      let restrictedDataDetected: boolean;
+      try {
+        restrictedDataDetected = containsRestrictedData([
+          parsed.data.title,
+          parsed.data.content_markdown,
+          parsed.data.summary,
+          ...(parsed.data.key_points ?? []),
+        ]);
+      } catch {
+        return {
+          isError: true,
+          content: [{
+            type: "text" as const,
+            text: "Noteflix could not complete the required privacy check, so no note was created. Try again later with the same request_id and identical inputs. Error code: restricted_data_check_unavailable.",
+          }],
+        };
+      }
+      if (restrictedDataDetected) {
+        return {
+          isError: true,
+          content: [{
+            type: "text" as const,
+            text: "This app cannot accept payment-card data, identifiable health information, government identifiers, passwords, API keys, authentication tokens, or verification codes. No note was created. Replace restricted values with non-identifying placeholders and use a fresh request_id. Error code: restricted_data_not_allowed.",
           }],
         };
       }
@@ -319,13 +348,13 @@ export function createNoteflixMcpServer(dependencies: {
     {
       title: "Create and publish a Noteflix note video",
       description:
-        "Reserves one monthly public-video credit and queues one AI-generated public video from a private note owned by the exact OAuth-connected user. First call get_video_allowance. Then show the note, style, mode, one-credit impact, that the source must be owned or permitted, and that the result will be public, shareable, and potentially discoverable. Call only after the user explicitly accepts all three facts in the current conversation; all confirmation fields must be true. Never call automatically after creating a note. Failed or abandoned renders refund the reserved credit. A retry must reuse the same request_id and identical inputs. Returns a readable Noteflix watch page, never a raw media URL.",
+        "Reserves one monthly public-video credit and queues one AI-generated public video from a private note owned by the exact OAuth-connected user. The source note must not contain payment-card data, identifiable health information, government identifiers, passwords, API keys, authentication tokens, or verification codes. First call get_video_allowance. Then show the note, style, mode, one-credit impact, that the source must be owned or permitted, and that the result will be public, shareable, and potentially discoverable. Call only after the user explicitly accepts all three facts in the current conversation; all confirmation fields must be true. Never call automatically after creating a note. Failed or abandoned renders refund the reserved credit. A retry must reuse the same request_id and identical inputs. Returns a readable Noteflix watch page, never a raw media URL.",
       inputSchema: createPublicNoteVideoInputSchema,
       outputSchema: createVideoOutputSchema,
       annotations: {
         title: "Create and publish a Noteflix note video",
         readOnlyHint: false,
-        destructiveHint: true,
+        destructiveHint: false,
         idempotentHint: true,
         openWorldHint: true,
       },
@@ -455,5 +484,6 @@ export function createNoteflixMcpServer(dependencies: {
     },
   );
 
+  installToolSecuritySchemeCompatibility(server);
   return server;
 }

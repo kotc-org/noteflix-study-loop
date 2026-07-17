@@ -186,6 +186,43 @@ describe("Noteflix production API adapter", () => {
     });
   });
 
+  it.each([
+    [400, "RESTRICTED_DATA_NOT_ALLOWED", "restricted_data_not_allowed", false],
+    [503, "CHECK_UNAVAILABLE", "restricted_data_check_unavailable", true],
+  ] as const)(
+    "maps note privacy failure %s %s without exposing the backend body",
+    async (status, backendCode, expectedCode, retryable) => {
+      const client = new NoteflixClient(testConfig(), {
+        getIdTokenClient: vi.fn().mockResolvedValue({
+          request: vi.fn().mockResolvedValue({
+            status,
+            data: {
+              code: backendCode,
+              matchedValue: "must not leak",
+              matchedCategory: "must not leak",
+            },
+          }),
+        }),
+      });
+      const input = createPrivateNoteInputSchema().parse({
+        request_id: "550e8400-e29b-41d4-a716-446655440000",
+        title: "Cell membranes",
+        content_markdown: "Membrane notes",
+      });
+
+      const error = await client.createPrivateNote("firebase-user-1", input).catch((cause) => cause);
+
+      expect(error).toMatchObject({
+        code: expectedCode,
+        retryable,
+        status,
+      });
+      expect(JSON.stringify(error)).not.toContain("matchedValue");
+      expect(JSON.stringify(error)).not.toContain("matchedCategory");
+      expect(JSON.stringify(error)).not.toContain("must not leak");
+    },
+  );
+
   it("reads only privacy-safe video allowance counts for the exact OAuth UID", async () => {
     const request = vi.fn().mockResolvedValue({
       status: 200,
@@ -319,6 +356,18 @@ describe("Noteflix production API adapter", () => {
   it.each([
     [
       400,
+      "RESTRICTED_DATA_NOT_ALLOWED",
+      "restricted_data_not_allowed",
+      false,
+    ],
+    [
+      503,
+      "CHECK_UNAVAILABLE",
+      "restricted_data_check_unavailable",
+      true,
+    ],
+    [
+      400,
       "CONTENT_MODERATION_REJECTED",
       "content_moderation_rejected",
       false,
@@ -330,7 +379,7 @@ describe("Noteflix production API adapter", () => {
       true,
     ],
   ] as const)(
-    "maps public safety failure %s %s without exposing the backend body",
+    "maps public privacy or safety failure %s %s without exposing the backend body",
     async (status, backendCode, expectedCode, retryable) => {
       const client = new NoteflixClient(testConfig(), {
         getIdTokenClient: vi.fn().mockResolvedValue({

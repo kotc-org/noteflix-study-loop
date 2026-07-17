@@ -4,14 +4,14 @@ export function createPrivateNoteInputSchema(maxContentChars = 50_000) {
   return z
     .object({
       request_id: z.string().uuid().describe("A fresh UUID for safe retries of this exact creation request."),
-      title: z.string().min(1).max(160).regex(/\S/, "Title must contain non-whitespace text.").describe("The exact title shown in the user's Noteflix library."),
-      content_markdown: z.string().min(1).max(maxContentChars).regex(/\S/, "Content must contain non-whitespace text.").describe("The exact complete Markdown note content to save."),
-      summary: z.string().min(1).max(1_000).regex(/\S/, "Summary must contain non-whitespace text.").optional().describe("Optional exact concise summary."),
+      title: z.string().min(1).max(160).regex(/\S/, "Title must contain non-whitespace text.").describe("The exact title shown in the user's Noteflix library. Do not include restricted personal, payment, government-ID, or authentication data."),
+      content_markdown: z.string().min(1).max(maxContentChars).regex(/\S/, "Content must contain non-whitespace text.").describe("The exact complete Markdown note content to save. It must not contain payment-card data, identifiable health information, government identifiers, passwords, API keys, authentication tokens, or verification codes."),
+      summary: z.string().min(1).max(1_000).regex(/\S/, "Summary must contain non-whitespace text.").optional().describe("Optional exact concise summary without restricted personal, payment, government-ID, or authentication data."),
       key_points: z
         .array(z.string().min(1).max(500).regex(/\S/, "Key points must contain non-whitespace text."))
         .max(20)
         .optional()
-        .describe("Optional key points derived from the note content."),
+        .describe("Optional key points derived from the note content, excluding restricted personal, payment, government-ID, or authentication data."),
     })
     .strict();
 }
@@ -100,7 +100,7 @@ export const createPublicNoteVideoInputSchema = z
       "A fresh UUID for this exact request; reuse it only for a safe retry with identical inputs.",
     ),
     note_id: noteflixIdSchema.describe(
-      "The ID of a private Noteflix note owned by the connected user.",
+      "The ID of a private Noteflix note owned by the connected user. Its source must not contain restricted payment, identifiable health, government-ID, or authentication data.",
     ),
     style: z
       .enum(NOTEBOOK_VIDEO_STYLES)

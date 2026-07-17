@@ -1,5 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
+import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 import { describe, expect, it, vi } from "vitest";
 
 import { createNoteflixMcpServer } from "../src/mcp.js";
@@ -11,8 +13,8 @@ import {
 } from "../src/oauth/policy.js";
 import { testConfig } from "./fixtures.js";
 
-async function listTools() {
-  const server = createNoteflixMcpServer({
+function catalogServer() {
+  return createNoteflixMcpServer({
     uid: "catalog-user",
     scopes: [
       NOTES_CREATE_SCOPE,
@@ -34,6 +36,10 @@ async function listTools() {
       retryAfterSeconds: 0,
     }),
   });
+}
+
+async function listTools() {
+  const server = catalogServer();
   const client = new Client({ name: "catalog-test", version: "1" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
@@ -46,7 +52,71 @@ async function listTools() {
   }
 }
 
+async function rawToolsList() {
+  const server = catalogServer();
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await server.connect(serverTransport);
+
+  const sendRequest = async (message: JSONRPCMessage) => {
+    if (!("id" in message)) throw new Error("A raw test request must include an id");
+    const id = message.id;
+    const response = new Promise<JSONRPCMessage>((resolve) => {
+      clientTransport.onmessage = (incoming) => {
+        if ("id" in incoming && incoming.id === id) resolve(incoming);
+      };
+    });
+    await clientTransport.send(message);
+    return response;
+  };
+
+  try {
+    await sendRequest({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: LATEST_PROTOCOL_VERSION,
+        capabilities: {},
+        clientInfo: { name: "raw-catalog-test", version: "1" },
+      },
+    });
+    await clientTransport.send({
+      jsonrpc: "2.0",
+      method: "notifications/initialized",
+    });
+    const response = await sendRequest({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/list",
+    });
+    if (!("result" in response)) throw new Error("tools/list did not return a result");
+    return response.result as {
+      tools: Array<{
+        name: string;
+        securitySchemes?: unknown;
+        _meta?: { securitySchemes?: unknown };
+      }>;
+    };
+  } finally {
+    await clientTransport.close();
+    await server.close();
+  }
+}
+
 describe("OpenAI app tool catalog", () => {
+  it("emits current and legacy OAuth security-scheme fields on the wire", async () => {
+    const { tools } = await rawToolsList();
+    expect(tools).toHaveLength(4);
+    for (const tool of tools) {
+      expect(tool.securitySchemes, tool.name).toEqual(
+        tool._meta?.securitySchemes,
+      );
+      expect(tool.securitySchemes, tool.name).toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: "oauth2" })]),
+      );
+    }
+  });
+
   it("publishes four narrowly scoped tools with exact schemas and safety annotations", async () => {
     const tools = await listTools();
     expect(tools.map((tool) => tool.name)).toEqual([
@@ -66,6 +136,11 @@ describe("OpenAI app tool catalog", () => {
     expect(byName.create_private_note?._meta?.securitySchemes).toEqual([
       { type: "oauth2", scopes: [NOTES_CREATE_SCOPE] },
     ]);
+    expect(byName.create_private_note?.description).toContain("payment-card data");
+    expect(byName.create_private_note?.description).toContain("identifiable health information");
+    const contentSchema = byName.create_private_note?.inputSchema.properties
+      ?.content_markdown as { description?: string } | undefined;
+    expect(contentSchema?.description).toContain("authentication tokens");
 
     expect(byName.get_video_allowance?.annotations).toMatchObject({
       readOnlyHint: true,
@@ -79,7 +154,7 @@ describe("OpenAI app tool catalog", () => {
 
     expect(byName.create_public_note_video?.annotations).toMatchObject({
       readOnlyHint: false,
-      destructiveHint: true,
+      destructiveHint: false,
       idempotentHint: true,
       openWorldHint: true,
     });
@@ -89,6 +164,8 @@ describe("OpenAI app tool catalog", () => {
         scopes: [VIDEOS_CREATE_SCOPE, VIDEOS_PUBLISH_SCOPE],
       },
     ]);
+    expect(byName.create_public_note_video?.description).toContain("payment-card data");
+    expect(byName.create_public_note_video?.description).toContain("verification codes");
     expect(byName.create_public_note_video?.inputSchema.required).toEqual(
       expect.arrayContaining([
         "request_id",

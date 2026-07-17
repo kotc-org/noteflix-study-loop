@@ -39,6 +39,8 @@ An existing eligible Noteflix account is required. The tools do not offer, sell,
 
 `create_private_note` accepts a strict UUID `request_id`, title, Markdown content, and optional confirmed summary/key points. Unknown fields, publishing controls, arbitrary URLs, collaborator IDs, user IDs, and derived-asset requests are rejected. The gateway constructs a fixed private downstream payload: the note is invisible, unlisted, and not rendered into a video.
 
+A deterministic in-process privacy gate rejects payment-card data, identifiable health information, government identifiers, passwords, API keys, authentication tokens, one-time passwords, and verification codes before subscription lookup, input hashing, idempotency storage, or a backend call. It returns only a static error and never echoes the matched value or category. The Noteflix backend repeats the check before a write.
+
 Identical retries reuse the same UUID. Reusing an ID with different content is rejected. A network timeout or ambiguous downstream response is not automatically retried; the caller is told to check the user's Noteflix library before choosing a new request ID.
 
 ### Public videos
@@ -52,6 +54,8 @@ Identical retries reuse the same UUID. Reusing an ID with different content is r
 - a readable public slug plus one of the allowlisted styles and modes.
 
 Creating a note never starts a render. The publication tool is intentionally separate because it consumes one user-specific allowance credit and produces an open-world public URL. Public source and generated text are moderated fail closed by the Noteflix backend, and the video is not anonymously resolvable unless it reaches the approved published state.
+
+The backend reads and checks the owned source note for restricted data before idempotency reservation, allowance use, external moderation, or generation. Legacy queued jobs repeat the check immediately after loading the note and before any model, speech, image, or rendering call.
 
 Tool responses return only allowlisted fields. Public videos use `https://noteflix.com/watch/{readable-slug}`; raw storage URLs and backend payloads are never returned.
 
@@ -93,7 +97,7 @@ curl http://localhost:8080/.well-known/oauth-protected-resource/mcp
 ## Production preparation
 
 1. Deploy this package as a new Cloud Run service using the dedicated `noteflix-openai-mcp@studywnoteflix.iam.gserviceaccount.com` runtime identity. Do not repoint the live Claude services.
-2. Use the named `noteflix-mcp` Firestore database and a distinct collection prefix. Grant only the minimum Firestore and target-service invocation permissions needed by this gateway.
+2. Use the dedicated named `noteflix-openai-mcp` Firestore database and the `noteflix_openai_mcp` collection prefix. Grant the runtime service account conditional Firestore access only to that database so it cannot read either Claude connector's OAuth state.
 3. Store one stable 32-byte `OAUTH_CLIENT_SECRET_ENCRYPTION_KEY` in Secret Manager. Treat it and all OAuth tokens as credentials.
 4. Set `PUBLIC_BASE_URL` to the final HTTPS origin and `MCP_RESOURCE_URL` to that origin plus `/mcp`. Changing either identifier invalidates existing OAuth relationships.
 5. Configure the exact internal Cloud Run audience, Noteflix app origin, Firebase Web Auth values, documentation URL, and trusted client origins from `.env.example`.
@@ -122,6 +126,7 @@ See `.env.example`. Production requires HTTPS for public, MCP, internal-audience
 - Firebase-UID binding and fail-closed subscription checks;
 - note idempotency and ambiguous-outcome behavior;
 - user-specific allowance, explicit public-generation confirmations, safe video errors, and status output;
+- deterministic restricted-data refusal before note/video mutations or provider calls;
 - OpenAI challenge output, MCP discovery, exact `401 WWW-Authenticate`, and `Origin` rejection.
 
 Tests do not send content to Noteflix, Firebase, or OpenAI.

@@ -122,6 +122,10 @@ const SUBSCRIPTION_UNAVAILABLE_CODES = new Set([
   "SUBSCRIPTION_VERIFICATION_UNAVAILABLE",
   "SUBSCRIPTION_CHECK_FAILED",
 ]);
+const RESTRICTED_DATA_CHECK_UNAVAILABLE_CODES = new Set([
+  "CHECK_UNAVAILABLE",
+  "RESTRICTED_DATA_CHECK_UNAVAILABLE",
+]);
 
 function backendErrorCode(data: unknown): string | undefined {
   const parsed = backendErrorSchema.safeParse(data);
@@ -321,6 +325,22 @@ export class NoteflixClient {
 
     if (response.status < 200 || response.status >= 300) {
       const backendCode = backendErrorCode(response.data);
+      if (backendCode === "RESTRICTED_DATA_NOT_ALLOWED") {
+        throw new NoteflixApiError(
+          "restricted_data_not_allowed",
+          "This app cannot accept restricted payment, identifiable health, government-ID, or authentication data. No note was created. Replace restricted values with non-identifying placeholders and use a fresh request_id.",
+          false,
+          response.status,
+        );
+      }
+      if (backendCode && RESTRICTED_DATA_CHECK_UNAVAILABLE_CODES.has(backendCode)) {
+        throw new NoteflixApiError(
+          "restricted_data_check_unavailable",
+          "Noteflix could not complete the required privacy check, so no note was created.",
+          true,
+          response.status,
+        );
+      }
       if (backendCode && SUBSCRIPTION_REQUIRED_CODES.has(backendCode)) {
         throw new NoteflixApiError(
           "subscription_required",
@@ -592,6 +612,22 @@ export class NoteflixClient {
   private throwVideoCreateError(status: number, data: unknown): never {
     const parsed = backendErrorSchema.safeParse(data);
     const error = parsed.success ? parsed.data : {};
+    if (error.code === "RESTRICTED_DATA_NOT_ALLOWED") {
+      throw new NoteflixApiError(
+        "restricted_data_not_allowed",
+        "The source note contains data this app cannot process. No video was queued and no credit was reserved. Replace restricted values in the source note, then use a fresh request_id.",
+        false,
+        status,
+      );
+    }
+    if (error.code && RESTRICTED_DATA_CHECK_UNAVAILABLE_CODES.has(error.code)) {
+      throw new NoteflixApiError(
+        "restricted_data_check_unavailable",
+        "Noteflix could not complete the required source privacy check. No video was queued and no credit was reserved.",
+        true,
+        status,
+      );
+    }
     if (status === 400 && error.code === "CONTENT_MODERATION_REJECTED") {
       throw new NoteflixApiError(
         "content_moderation_rejected",

@@ -17,6 +17,7 @@ import { FirestoreOAuthStore } from "./oauth/firestore-store.js";
 import { IdentityToolkitVerifier, type NoteflixIdentityVerifier } from "./oauth/identity.js";
 import { NoteflixOAuthProvider, uidFromAuthInfo } from "./oauth/provider.js";
 import { SUPPORTED_SCOPES } from "./oauth/policy.js";
+import { preserveOAuthStateOnErrorRedirect } from "./oauth/state-preservation.js";
 import { FirestoreIdempotencyStore, IdempotencyCoordinator } from "./persistence/idempotency.js";
 import { FirestoreFixedWindowRateLimiter, persistentMcpRateLimit } from "./persistence/rate-limit.js";
 
@@ -102,6 +103,7 @@ export function createApp(config: AppConfig, runtime: RuntimeDependencies) {
     res.set("Cache-Control", "public, max-age=300").status(200).json(oauthMetadata),
   );
 
+  app.use("/authorize", preserveOAuthStateOnErrorRedirect());
   app.use(
     mcpAuthRouter({
       provider,

@@ -12,9 +12,10 @@ Prepare a dedicated, non-production Noteflix reviewer account and transmit its c
 - [ ] Add one owned private sample note with harmless, non-personal educational content and enough material for a brief video.
 - [ ] Confirm the sample note ID is accepted only for this reviewer account.
 - [ ] Keep one existing ready public sample video for a non-mutating status test in case a fresh render is delayed.
+- [ ] Prepare one harmless video ID owned by a separate locked synthetic account for the cross-account denial test. Reviewers receive only its ID, never that account's credentials.
 - [ ] Confirm the sample video's readable watch page works signed out and reveals no source-note body, user email, raw storage URL, generation prompt, or provider metadata.
 - [ ] Confirm the private source note does not work signed out and is not exposed through the public watch route.
-- [ ] Record the reviewer account email, password, sample note ID, ready video ID, expected watch URL, starting allowance, and cleanup steps in the portal's private instructions—not in source control.
+- [ ] Record the reviewer account email, password, sample note ID, ready video ID, foreign-account video ID, expected watch URL, starting allowance, and cleanup steps in the portal's private instructions—not in source control.
 - [ ] Confirm the account contains no real learner records, grades, credentials, protected health information, payment details, or proprietary course material.
 
 ## Private reviewer instructions template
@@ -29,10 +30,11 @@ MFA/2FA: disabled; no secondary verification is required
 Entitlement: pre-provisioned and active; no purchase is needed
 Private sample note ID: [PRIVATE NOTE ID]
 Ready sample video ID: [VIDEO ID]
+Foreign-account video ID (denial fixture only): [FOREIGN VIDEO ID]
 Expected public watch page: [READABLE FIRST-PARTY WATCH URL]
 Expected starting allowance: [VERIFIED COUNTS AND UTC RESET]
 
-Connect Noteflix through the normal OAuth screen in ChatGPT. The consent screen should identify ChatGPT and the exact Noteflix account. Run REVIEW_SCENARIOS.md in order. Do not purchase or change a subscription. Delete artifacts using the cleanup steps below.
+Connect Noteflix through the normal OAuth screen in ChatGPT. The consent screen should identify ChatGPT and the exact Noteflix account. Run REVIEW_SCENARIOS.md in order on ChatGPT web and mobile. Do not purchase or change a subscription. Delete artifacts using the cleanup steps below.
 ```
 
 ## After review
@@ -45,4 +47,4 @@ Connect Noteflix through the normal OAuth screen in ChatGPT. The consent screen 
 - [ ] Rotate the reviewer password after the review cycle.
 - [ ] Inspect logs without recording note bodies, credentials, or token values.
 
-Do not state that deleting a video or account physically removes every storage object until the storage-deletion and account-cascade blockers in [`READINESS_AUDIT.md`](READINESS_AUDIT.md) are resolved and verified.
+The deployed deletion behavior and durable late-upload cleanup must pass the production verification gates in [`READINESS_AUDIT.md`](READINESS_AUDIT.md) before these instructions are pasted into the portal.
