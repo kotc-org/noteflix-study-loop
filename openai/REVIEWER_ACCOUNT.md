@@ -2,21 +2,23 @@
 
 Prepare a dedicated, non-production Noteflix reviewer account and transmit its credentials only through the OpenAI submission portal's private reviewer fields.
 
+Verified production snapshot: password sign-in through the OAuth consent flow succeeded without MFA; the OAuth token record and eligible entitlement resolve for the exact Firebase UID; repeated allowance reads were unchanged and still report generation available. A harmless private note, ready public-video fixture, and known-good locked second-account denial fixture are stored privately. A real deterministic creation replay returned the same receipt with zero allowance change. Signed-out verification passed for the public watch page, allowlisted metadata, playback, and the existing exact-owner private note's denial. Clean-browser login and the portal-private instruction paste remain open.
+
 ## Before submission
 
-- [ ] Use a unique email/password account that the review team can access without an API key, email link, SMS code, authenticator, passkey, SSO administrator, 2FA, or MFA.
+- [x] Use a unique email/password account that the review team can access without an API key, email link, SMS code, authenticator, passkey, SSO administrator, 2FA, or MFA.
 - [ ] Confirm the password works in a clean signed-out browser and does not require a first-login reset.
-- [ ] Pre-provision an active eligible Noteflix entitlement. Reviewers must not purchase, restore, upgrade, or manage a subscription.
-- [ ] Verify the entitlement resolves for the exact Firebase UID produced by this account's OAuth sign-in.
-- [ ] Keep at least one public-video allowance credit available and clear the short-term generation rate limit before review.
-- [ ] Add one owned private sample note with harmless, non-personal educational content and enough material for a brief video.
-- [ ] Confirm the sample note ID is accepted only for this reviewer account.
-- [ ] Keep one existing ready public sample video for a non-mutating status test in case a fresh render is delayed.
-- [ ] Prepare one harmless video ID owned by a separate locked synthetic account for the cross-account denial test. Reviewers receive only its ID, never that account's credentials.
-- [ ] Confirm the sample video's readable watch page works signed out and reveals no source-note body, user email, raw storage URL, generation prompt, or provider metadata.
-- [ ] Confirm the private source note does not work signed out and is not exposed through the public watch route.
+- [x] Pre-provision an active eligible Noteflix entitlement. Reviewers must not purchase, restore, upgrade, or manage a subscription.
+- [x] Verify the entitlement resolves for the exact Firebase UID produced by this account's OAuth sign-in.
+- [x] Keep at least one public-video allowance credit available and clear the short-term generation rate limit before review.
+- [x] Add one owned private sample note with harmless, non-personal educational content and enough material for a brief video.
+- [x] Confirm the sample note ID is accepted only for this reviewer account.
+- [x] Keep one existing ready public sample video for a non-mutating status test in case a fresh render is delayed.
+- [x] Prepare one harmless video ID owned by a separate locked synthetic account for the cross-account denial test. Reviewers receive only its ID, never that account's credentials.
+- [x] Confirm the sample video's readable watch page works signed out and reveals no source-note body, user email, raw storage URL, generation prompt, or provider metadata.
+- [x] Confirm the private source note does not work signed out and is not exposed through the public watch route.
 - [ ] Record the reviewer account email, password, sample note ID, ready video ID, foreign-account video ID, expected watch URL, starting allowance, and cleanup steps in the portal's private instructions—not in source control.
-- [ ] Confirm the account contains no real learner records, grades, credentials, protected health information, payment details, or proprietary course material.
+- [x] Confirm the account contains no real learner records, grades, credentials, protected health information, payment details, or proprietary course material.
 
 ## Private reviewer instructions template
 

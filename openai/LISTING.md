@@ -84,5 +84,5 @@ Initial submission of the MCP-backed Noteflix Study & Video plugin. Reviewer acc
 ## Portal notes
 
 - Publisher display name must match the identity verified in the same OpenAI organization. Do not add “official,” “OpenAI,” “ChatGPT,” or any endorsement claim to the app name.
-- Submit as an MCP-backed app without a custom web component. Enter a deny-all component CSP because this release has no iframe or widget fetches: `connectDomains: []`, `resourceDomains: []`, and `frameDomains: []`. Do not add wildcard CSP entries.
+- Create the portal item using **Create plugin → With MCP** as an app-only plugin without a skills bundle or custom web component. Do not upload screenshots for this no-UI release. Enter a deny-all component CSP because this release has no iframe or widget fetches: `connectDomains: []`, `resourceDomains: []`, and `frameDomains: []`. Do not add wildcard CSP entries.
 - Supply demo credentials and sample IDs only through the portal's private reviewer fields, never in public listing text or this repository.
