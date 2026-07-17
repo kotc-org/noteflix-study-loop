@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createNoteflixMcpServer } from "../src/mcp.js";
 import { NoteflixApiError, type CreatedPrivateNote } from "../src/noteflix/client.js";
+import { NOTES_CREATE_SCOPE } from "../src/oauth/policy.js";
 import { testConfig } from "./fixtures.js";
 
 const UID = "firebase-user-1";
@@ -18,6 +19,22 @@ const CREATED: CreatedPrivateNote = {
   slug: "cell-membranes",
   url: "https://noteflix.test/ai-notetaker/notes/cell-membranes",
   visibility: "private",
+};
+
+function unusedMediaMethods() {
+  return {
+    getVideoAllowance: vi.fn(),
+    createPublicNoteVideo: vi.fn(),
+    getVideoStatus: vi.fn(),
+  };
+}
+
+const commonServerDependencies = {
+  scopes: [NOTES_CREATE_SCOPE],
+  generationRateLimit: vi.fn().mockResolvedValue({
+    allowed: true,
+    retryAfterSeconds: 0,
+  }),
 };
 
 async function withClient<T>(
@@ -48,11 +65,13 @@ describe("create_private_note subscription gate", () => {
         ),
       ),
       createPrivateNote: vi.fn(),
+      ...unusedMediaMethods(),
     };
     const idempotency = { run: vi.fn() };
 
     const result = await withClient({
       uid: UID,
+      ...commonServerDependencies,
       config: testConfig(),
       idempotency,
       noteflixClient,
@@ -74,6 +93,7 @@ describe("create_private_note subscription gate", () => {
     const noteflixClient = {
       requireEligibleSubscription: vi.fn().mockResolvedValue(undefined),
       createPrivateNote: vi.fn().mockResolvedValue(CREATED),
+      ...unusedMediaMethods(),
     };
     const idempotency = {
       run: vi.fn(async (input: { operation: () => Promise<CreatedPrivateNote> }) => ({
@@ -84,17 +104,18 @@ describe("create_private_note subscription gate", () => {
 
     const result = await withClient({
       uid: UID,
+      ...commonServerDependencies,
       config: testConfig(),
       idempotency,
       noteflixClient,
     }, (client) => client.callTool({ name: "create_private_note", arguments: INPUT }));
 
-    expect(result.isError).not.toBe(true);
-    expect(result.structuredContent).toMatchObject({
-      status: "created",
-      request_id: INPUT.request_id,
-      cached: false,
-      note: CREATED,
+    expect(result).toMatchObject({
+      structuredContent: {
+        status: "created",
+        cached: false,
+        note: CREATED,
+      },
     });
     expect(noteflixClient.requireEligibleSubscription).toHaveBeenCalledWith(UID);
     expect(noteflixClient.createPrivateNote).toHaveBeenCalledWith(UID, INPUT);

@@ -10,7 +10,7 @@ const envSchema = z.object({
   MCP_RESOURCE_URL: z.string().url(),
   MCP_ALLOWED_ORIGINS: z
     .string()
-    .default("https://claude.ai"),
+    .default("https://chatgpt.com,https://claude.ai"),
   SERVICE_DOCUMENTATION_URL: z.string().url().default("https://noteflix.com"),
   NOTEFLIX_INTERNAL_AUDIENCE: z.string().url(),
   NOTEFLIX_APP_BASE_URL: z.string().url().default("https://noteflix.com"),
@@ -19,6 +19,13 @@ const envSchema = z.object({
   FIREBASE_WEB_AUTH_DOMAIN: z.string().regex(/^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$/),
   FIREBASE_WEB_APP_ID: z.string().min(1),
   OAUTH_CLIENT_SECRET_ENCRYPTION_KEY: z.string().min(1),
+  OPENAI_APPS_CHALLENGE_TOKEN: z
+    .string()
+    .trim()
+    .min(1)
+    .max(512)
+    .regex(/^\S+$/)
+    .optional(),
   FIRESTORE_DATABASE_ID: z
     .string()
     .regex(/^(?:\(default\)|[a-z0-9](?:[a-z0-9-]{2,61}[a-z0-9])?)$/)
@@ -26,13 +33,14 @@ const envSchema = z.object({
   FIRESTORE_COLLECTION_PREFIX: z
     .string()
     .regex(/^[a-z][a-z0-9_]{2,40}$/)
-    .default("noteflix_claude_mcp"),
+    .default("noteflix_openai_mcp"),
   OAUTH_CLIENT_REGISTRATION_TTL_SECONDS: positiveInt(2_592_000),
   OAUTH_AUTHORIZATION_REQUEST_TTL_SECONDS: positiveInt(600),
   OAUTH_AUTHORIZATION_CODE_TTL_SECONDS: positiveInt(300),
   OAUTH_ACCESS_TOKEN_TTL_SECONDS: positiveInt(3600),
   OAUTH_REFRESH_TOKEN_TTL_SECONDS: positiveInt(2_592_000),
   MCP_RATE_LIMIT_PER_MINUTE: positiveInt(30),
+  VIDEO_CREATE_RATE_LIMIT_PER_HOUR: positiveInt(3),
   CONSENT_RATE_LIMIT_PER_15_MINUTES: positiveInt(60),
   NOTEFLIX_REQUEST_TIMEOUT_MS: positiveInt(45_000),
   MAX_NOTE_CONTENT_CHARS: positiveInt(50_000),
@@ -55,6 +63,7 @@ export type AppConfig = {
     appId: string;
   };
   oauthClientSecretEncryptionKey: Buffer;
+  openaiAppsChallengeToken?: string;
   firestoreDatabaseId: string;
   collectionPrefix: string;
   clientRegistrationTtlSeconds: number;
@@ -63,6 +72,7 @@ export type AppConfig = {
   accessTokenTtlSeconds: number;
   refreshTokenTtlSeconds: number;
   mcpRateLimitPerMinute: number;
+  videoCreateRateLimitPerHour: number;
   consentRateLimitPer15Minutes: number;
   noteflixRequestTimeoutMs: number;
   maxNoteContentChars: number;
@@ -155,6 +165,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       appId: parsed.FIREBASE_WEB_APP_ID,
     },
     oauthClientSecretEncryptionKey: decodeEncryptionKey(parsed.OAUTH_CLIENT_SECRET_ENCRYPTION_KEY),
+    ...(parsed.OPENAI_APPS_CHALLENGE_TOKEN
+      ? { openaiAppsChallengeToken: parsed.OPENAI_APPS_CHALLENGE_TOKEN }
+      : {}),
     firestoreDatabaseId: parsed.FIRESTORE_DATABASE_ID,
     collectionPrefix: parsed.FIRESTORE_COLLECTION_PREFIX,
     clientRegistrationTtlSeconds: parsed.OAUTH_CLIENT_REGISTRATION_TTL_SECONDS,
@@ -163,6 +176,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     accessTokenTtlSeconds: parsed.OAUTH_ACCESS_TOKEN_TTL_SECONDS,
     refreshTokenTtlSeconds: parsed.OAUTH_REFRESH_TOKEN_TTL_SECONDS,
     mcpRateLimitPerMinute: parsed.MCP_RATE_LIMIT_PER_MINUTE,
+    videoCreateRateLimitPerHour: parsed.VIDEO_CREATE_RATE_LIMIT_PER_HOUR,
     consentRateLimitPer15Minutes: parsed.CONSENT_RATE_LIMIT_PER_15_MINUTES,
     noteflixRequestTimeoutMs: parsed.NOTEFLIX_REQUEST_TIMEOUT_MS,
     maxNoteContentChars: parsed.MAX_NOTE_CONTENT_CHARS,

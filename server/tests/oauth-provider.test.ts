@@ -50,11 +50,15 @@ class MemoryOAuthStore implements OAuthStore {
   async createAccessToken(token: string, record: StoredTokenRecord): Promise<void> { this.access.set(token, record); }
   async createRefreshToken(token: string, record: StoredTokenRecord): Promise<void> { this.refresh.set(token, record); }
   async getAccessToken(token: string): Promise<StoredTokenRecord | undefined> { return this.access.get(token); }
-  async rotateRefreshToken(oldToken: string, newToken: string, clientId: string, scopes: string[], resource: string): Promise<StoredTokenRecord> {
+  async rotateRefreshToken(oldToken: string, newToken: string, clientId: string, scopes: string[] | undefined, resource: string): Promise<StoredTokenRecord> {
     const old = this.refresh.get(oldToken);
     if (!old) throw new Error("missing refresh token");
+    const nextScopes = scopes ?? old.scopes;
+    if (nextScopes.some((scope) => !old.scopes.includes(scope))) {
+      throw new Error("Refresh scope exceeds the original grant");
+    }
     this.refresh.delete(oldToken);
-    const next = { ...old, clientId, scopes, resource };
+    const next = { ...old, clientId, scopes: nextScopes, resource };
     this.refresh.set(newToken, next);
     return next;
   }
@@ -62,16 +66,79 @@ class MemoryOAuthStore implements OAuthStore {
 }
 
 describe("OAuth provider flow", () => {
+  it("uses callback-specific defaults only when the client omits scopes", async () => {
+    const store = new MemoryOAuthStore();
+    const provider = new NoteflixOAuthProvider(
+      store,
+      { verify: vi.fn() },
+      testConfig(),
+    );
+    const redirect = vi.fn();
+    const baseClient = {
+      client_id_issued_at: 1,
+      token_endpoint_auth_method: "none" as const,
+    };
+
+    const claude: OAuthClientInformationFull = {
+      ...baseClient,
+      client_id: "claude-client",
+      redirect_uris: ["https://claude.ai/api/mcp/auth_callback"],
+    };
+    await provider.authorize(
+      claude,
+      {
+        codeChallenge: "challenge",
+        redirectUri: claude.redirect_uris[0]!,
+        resource: testConfig().mcpResourceUrl,
+      },
+      { redirect } as unknown as Response,
+    );
+    expect(store.request?.record.scopes).toEqual(["notes:create"]);
+
+    const chatgpt: OAuthClientInformationFull = {
+      ...baseClient,
+      client_id: "chatgpt-client",
+      redirect_uris: ["https://chatgpt.com/connector/oauth/callback_123"],
+    };
+    await provider.authorize(
+      chatgpt,
+      {
+        codeChallenge: "challenge",
+        redirectUri: chatgpt.redirect_uris[0]!,
+        resource: testConfig().mcpResourceUrl,
+      },
+      { redirect } as unknown as Response,
+    );
+    expect(store.request?.record.scopes).toEqual([
+      "notes:create",
+      "videos:create",
+      "videos:read",
+      "videos:publish",
+    ]);
+
+    await provider.authorize(
+      chatgpt,
+      {
+        scopes: ["videos:read"],
+        codeChallenge: "challenge",
+        redirectUri: chatgpt.redirect_uris[0]!,
+        resource: testConfig().mcpResourceUrl,
+      },
+      { redirect } as unknown as Response,
+    );
+    expect(store.request?.record.scopes).toEqual(["videos:read"]);
+  });
+
   it("binds Firebase consent, authorization code, access token, and refresh token to one resource", async () => {
     const store = new MemoryOAuthStore();
     const identityVerifier = { verify: vi.fn().mockResolvedValue({ uid: "firebase-user-1" }) };
     const config = testConfig();
     const provider = new NoteflixOAuthProvider(store, identityVerifier, config);
     const client: OAuthClientInformationFull = {
-      client_id: "claude-client",
+      client_id: "chatgpt-client",
       client_id_issued_at: 1,
-      client_name: "Claude",
-      redirect_uris: ["https://claude.ai/api/mcp/auth_callback"],
+      client_name: "<b>Untrusted client-supplied name</b>",
+      redirect_uris: ["https://chatgpt.com/connector/oauth/callback_123"],
       token_endpoint_auth_method: "none",
     };
     const redirect = vi.fn();
@@ -90,7 +157,7 @@ describe("OAuth provider flow", () => {
     await provider.authorize(
       client,
       {
-        scopes: ["notes:create", "offline_access"],
+        scopes: ["notes:create", "videos:read", "offline_access"],
         codeChallenge: "challenge",
         redirectUri: client.redirect_uris[0]!,
         state: "state-1",
@@ -101,8 +168,8 @@ describe("OAuth provider flow", () => {
     const consentLocation = new URL(redirect.mock.calls[0]![1]);
     const requestToken = consentLocation.searchParams.get("request_id")!;
     await expect(provider.getConsentView(requestToken)).resolves.toMatchObject({
-      clientName: "Claude",
-      callbackHostname: "claude.ai",
+      clientName: "ChatGPT",
+      callbackHostname: "chatgpt.com",
       loopbackCallback: false,
     });
     const completed = await provider.completeConsent({
@@ -142,10 +209,38 @@ describe("OAuth provider flow", () => {
     expect(tokens.refresh_token).toBeTruthy();
     const authInfo = await provider.verifyAccessToken(tokens.access_token);
     expect(authInfo).toMatchObject({
-      clientId: "claude-client",
-      scopes: ["notes:create", "offline_access"],
+      clientId: "chatgpt-client",
+      scopes: ["notes:create", "videos:read", "offline_access"],
       extra: { uid: "firebase-user-1" },
     });
     expect(authInfo.resource?.href).toBe("http://localhost:8080/mcp");
+
+    const refreshed = await provider.exchangeRefreshToken(
+      client,
+      tokens.refresh_token!,
+      undefined,
+      config.mcpResourceUrl,
+    );
+    await expect(provider.verifyAccessToken(refreshed.access_token)).resolves.toMatchObject({
+      scopes: ["notes:create", "videos:read", "offline_access"],
+    });
+
+    const narrowed = await provider.exchangeRefreshToken(
+      client,
+      refreshed.refresh_token!,
+      ["videos:read"],
+      config.mcpResourceUrl,
+    );
+    await expect(provider.verifyAccessToken(narrowed.access_token)).resolves.toMatchObject({
+      scopes: ["videos:read"],
+    });
+    await expect(
+      provider.exchangeRefreshToken(
+        client,
+        narrowed.refresh_token!,
+        ["notes:create", "videos:read"],
+        config.mcpResourceUrl,
+      ),
+    ).rejects.toThrow(/exceeds the original grant/);
   });
 });

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { buildPrivateNotePayload, createPrivateNoteInputSchema } from "../src/noteflix/input.js";
+import {
+  buildPrivateNotePayload,
+  createPrivateNoteInputSchema,
+  createPublicNoteVideoInputSchema,
+  publicVideoSlugSchema,
+} from "../src/noteflix/input.js";
 
 describe("create_private_note contract", () => {
   const valid = {
@@ -63,5 +68,56 @@ describe("create_private_note contract", () => {
       keyPoints: [],
       sourceText: exactMarkdown,
     });
+  });
+});
+
+describe("create_public_note_video contract", () => {
+  const valid = {
+    request_id: "550e8400-e29b-41d4-a716-446655440000",
+    note_id: "note-123",
+    style: "whiteboard",
+    mode: "brief",
+    user_confirmed_generation: true,
+    user_confirmed_publication: true,
+    user_confirmed_source_rights: true,
+  };
+
+  it("requires generation, publication, and source-rights confirmations", () => {
+    expect(createPublicNoteVideoInputSchema.safeParse(valid).success).toBe(true);
+    for (const field of [
+      "user_confirmed_generation",
+      "user_confirmed_publication",
+      "user_confirmed_source_rights",
+    ] as const) {
+      expect(createPublicNoteVideoInputSchema.safeParse({
+        ...valid,
+        [field]: false,
+      }).success).toBe(false);
+      const { [field]: _missing, ...withoutField } = valid;
+      expect(createPublicNoteVideoInputSchema.safeParse(withoutField).success).toBe(false);
+    }
+  });
+
+  it("rejects URLs, arbitrary account IDs, unsupported modes, and extra fields", () => {
+    expect(createPublicNoteVideoInputSchema.safeParse({
+      ...valid,
+      note_id: "https://noteflix.com/notes/note-123",
+    }).success).toBe(false);
+    expect(createPublicNoteVideoInputSchema.safeParse({
+      ...valid,
+      noteflix_user_id: "other-user",
+    }).success).toBe(false);
+    expect(createPublicNoteVideoInputSchema.safeParse({
+      ...valid,
+      mode: "cinematic",
+    }).success).toBe(false);
+  });
+
+  it("accepts readable Unicode slugs and rejects IDs or reserved route words", () => {
+    expect(publicVideoSlugSchema.safeParse("mitosis-explained").success).toBe(true);
+    expect(publicVideoSlugSchema.safeParse("células-y-adn").success).toBe(true);
+    expect(publicVideoSlugSchema.safeParse("watch").success).toBe(false);
+    expect(publicVideoSlugSchema.safeParse("Not-Lowercase").success).toBe(false);
+    expect(publicVideoSlugSchema.safeParse("random_id_value").success).toBe(false);
   });
 });

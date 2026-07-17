@@ -16,7 +16,13 @@ describe("remote MCP HTTP contract", () => {
     expect(response.body).toMatchObject({
       resource: "http://localhost:8080/mcp",
       authorization_servers: ["http://localhost:8080/"],
-      scopes_supported: ["notes:create", "offline_access"],
+      scopes_supported: [
+        "notes:create",
+        "videos:create",
+        "videos:read",
+        "videos:publish",
+        "offline_access",
+      ],
     });
   });
 
@@ -35,10 +41,26 @@ describe("remote MCP HTTP contract", () => {
       .set("content-type", "application/json")
       .send({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
     expect(response.status).toBe(401);
-    expect(response.headers["www-authenticate"]).toContain('scope="notes:create"');
+    expect(response.headers["www-authenticate"]).not.toContain('scope=');
     expect(response.headers["www-authenticate"]).toContain(
       'resource_metadata="http://localhost:8080/.well-known/oauth-protected-resource/mcp"',
     );
+  });
+
+  it("serves only the configured OpenAI domain-verification token", async () => {
+    const token = "openai-domain-verification-token_123";
+    const app = createApp(testConfig({ OPENAI_APPS_CHALLENGE_TOKEN: token }), {
+      db: {} as never,
+    });
+    const response = await request(app).get("/.well-known/openai-apps-challenge");
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/plain");
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.text).toBe(token);
+
+    const absent = await request(contractApp()).get("/.well-known/openai-apps-challenge");
+    expect(absent.status).toBe(404);
+    expect(absent.text).not.toContain(token);
   });
 
   it("rejects unapproved supplied origins before MCP processing", async () => {
@@ -54,6 +76,14 @@ describe("remote MCP HTTP contract", () => {
       .set("origin", "https://claude.ai")
       .send({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
     expect(allowed.status).toBe(401);
+
+    const chatgpt = await request(createApp(testConfig({
+      MCP_ALLOWED_ORIGINS: "https://chatgpt.com,https://claude.ai",
+    }), { db: {} as never }))
+      .post("/mcp")
+      .set("origin", "https://chatgpt.com")
+      .send({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+    expect(chatgpt.status).toBe(401);
 
     const undocumentedClaudeOrigin = await request(contractApp())
       .post("/mcp")

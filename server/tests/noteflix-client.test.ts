@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { NoteflixApiError, NoteflixClient } from "../src/noteflix/client.js";
-import { createPrivateNoteInputSchema } from "../src/noteflix/input.js";
+import {
+  createPrivateNoteInputSchema,
+  createPublicNoteVideoInputSchema,
+} from "../src/noteflix/input.js";
 import { testConfig } from "./fixtures.js";
 
 describe("Noteflix production API adapter", () => {
@@ -181,5 +184,237 @@ describe("Noteflix production API adapter", () => {
       retryable: true,
       status,
     });
+  });
+
+  it("reads only privacy-safe video allowance counts for the exact OAuth UID", async () => {
+    const request = vi.fn().mockResolvedValue({
+      status: 200,
+      data: {
+        schemaVersion: 1,
+        userId: "firebase-user-1",
+        eligible: true,
+        canGenerate: true,
+        reason: "available",
+        used: 3,
+        reserved: 1,
+        consumed: 2,
+        limit: 20,
+        remaining: 17,
+        periodStart: "2026-07-01T00:00:00.000Z",
+        periodEnd: "2026-08-01T00:00:00.000Z",
+      },
+    });
+    const client = new NoteflixClient(testConfig(), {
+      getIdTokenClient: vi.fn().mockResolvedValue({ request }),
+    });
+
+    const allowance = await client.getVideoAllowance("firebase-user-1");
+    expect(allowance).toEqual({
+      eligible: true,
+      can_generate: true,
+      reason: "available",
+      used: 3,
+      in_flight: 1,
+      completed: 2,
+      limit: 20,
+      remaining: 17,
+      period_start: "2026-07-01T00:00:00.000Z",
+      resets_at: "2026-08-01T00:00:00.000Z",
+      message: "17 of 20 public-video credits remain this month.",
+    });
+    const init = request.mock.calls[0]![0];
+    expect(init.url).toBe(
+      "https://ainotes.noteflix.test/internal/claude-media/v2/video-allowance",
+    );
+    const headers = new Headers(init.headers);
+    expect(headers.get("x-noteflix-integration")).toBe("claude-media-mcp");
+    expect(headers.get("x-noteflix-user-id")).toBe("firebase-user-1");
+    expect(JSON.stringify(allowance)).not.toContain("manage");
+    expect(JSON.stringify(allowance)).not.toContain("billing");
+  });
+
+  it("fails closed when a video allowance response is for a different UID", async () => {
+    const client = new NoteflixClient(testConfig(), {
+      getIdTokenClient: vi.fn().mockResolvedValue({
+        request: vi.fn().mockResolvedValue({
+          status: 200,
+          data: {
+            schemaVersion: 1,
+            userId: "other-user",
+            eligible: true,
+            canGenerate: true,
+            reason: "available",
+            used: 0,
+            reserved: 0,
+            consumed: 0,
+            limit: 20,
+            remaining: 20,
+            periodStart: "2026-07-01T00:00:00.000Z",
+            periodEnd: "2026-08-01T00:00:00.000Z",
+          },
+        }),
+      }),
+    });
+
+    await expect(client.getVideoAllowance("firebase-user-1")).rejects.toMatchObject({
+      code: "subscription_identity_mismatch",
+      retryable: false,
+    });
+  });
+
+  it("queues a public video with exact UID binding and a readable Noteflix slug URL", async () => {
+    const request = vi.fn().mockResolvedValue({
+      status: 200,
+      data: {
+        id: "video-123",
+        noteId: "note-123",
+        slug: "cell-membranes-explained",
+        status: "queued",
+        style: "whiteboard",
+        mode: "brief",
+        privacy: "public",
+      },
+    });
+    const client = new NoteflixClient(testConfig(), {
+      getIdTokenClient: vi.fn().mockResolvedValue({ request }),
+    });
+    const input = createPublicNoteVideoInputSchema.parse({
+      request_id: "550e8400-e29b-41d4-a716-446655440000",
+      note_id: "note-123",
+      style: "whiteboard",
+      mode: "brief",
+      user_confirmed_generation: true,
+      user_confirmed_publication: true,
+      user_confirmed_source_rights: true,
+    });
+
+    const video = await client.createPublicNoteVideo("firebase-user-1", input);
+    expect(video).toEqual({
+      video_id: "video-123",
+      note_id: "note-123",
+      slug: "cell-membranes-explained",
+      status: "queued",
+      style: "whiteboard",
+      mode: "brief",
+      privacy: "public",
+      url: "https://noteflix.test/watch/cell-membranes-explained",
+      ai_generated: true,
+    });
+    const init = request.mock.calls[0]![0];
+    expect(init.url).toBe(
+      "https://ainotes.noteflix.test/internal/claude-media/v2/ai-notes/note-123/public-notebook-video",
+    );
+    expect(init.data).toEqual({
+      noteflixUserId: "firebase-user-1",
+      style: "whiteboard",
+      mode: "brief",
+      user_confirmed_publication: true,
+    });
+    const headers = new Headers(init.headers);
+    expect(headers.get("x-noteflix-integration")).toBe("claude-media-mcp");
+    expect(headers.get("idempotency-key")).toBe(input.request_id);
+    expect(headers.get("x-request-id")).toBe(input.request_id);
+  });
+
+  it.each([
+    [
+      400,
+      "CONTENT_MODERATION_REJECTED",
+      "content_moderation_rejected",
+      false,
+    ],
+    [
+      503,
+      "CONTENT_MODERATION_UNAVAILABLE",
+      "content_moderation_unavailable",
+      true,
+    ],
+  ] as const)(
+    "maps public safety failure %s %s without exposing the backend body",
+    async (status, backendCode, expectedCode, retryable) => {
+      const client = new NoteflixClient(testConfig(), {
+        getIdTokenClient: vi.fn().mockResolvedValue({
+          request: vi.fn().mockResolvedValue({
+            status,
+            data: { code: backendCode, internalPrompt: "must not leak" },
+          }),
+        }),
+      });
+      const input = createPublicNoteVideoInputSchema.parse({
+        request_id: "550e8400-e29b-41d4-a716-446655440000",
+        note_id: "note-123",
+        style: "whiteboard",
+        mode: "brief",
+        user_confirmed_generation: true,
+        user_confirmed_publication: true,
+        user_confirmed_source_rights: true,
+      });
+
+      const error = await client
+        .createPublicNoteVideo("firebase-user-1", input)
+        .catch((cause) => cause);
+
+      expect(error).toMatchObject({
+        code: expectedCode,
+        retryable,
+        status,
+      });
+      expect(JSON.stringify(error)).not.toContain("internalPrompt");
+      expect(JSON.stringify(error)).not.toContain("must not leak");
+    },
+  );
+
+  it("maps a public video status without exposing raw media fields", async () => {
+    const request = vi.fn().mockResolvedValue({
+      status: 200,
+      data: {
+        id: "video-123",
+        noteId: "note-123",
+        slug: "cell-membranes-explained",
+        status: "completed",
+        progress: 99.6,
+        updatedAt: "2026-07-16T20:00:00.000Z",
+        privacy: "public",
+      },
+    });
+    const client = new NoteflixClient(testConfig(), {
+      getIdTokenClient: vi.fn().mockResolvedValue({ request }),
+    });
+
+    const status = await client.getVideoStatus("firebase-user-1", "video-123");
+    expect(status).toMatchObject({
+      video_id: "video-123",
+      note_id: "note-123",
+      slug: "cell-membranes-explained",
+      status: "ready",
+      progress: 100,
+      privacy: "public",
+      url: "https://noteflix.test/watch/cell-membranes-explained",
+      ai_generated: true,
+      next_action: "open_video",
+      recommended_check_after_seconds: null,
+    });
+    expect(JSON.stringify(status)).not.toContain("storage");
+    expect(JSON.stringify(status)).not.toContain("download");
+  });
+
+  it("returns a neutral gate for ineligible video accounts without an upgrade URL", async () => {
+    const client = new NoteflixClient(testConfig(), {
+      getIdTokenClient: vi.fn().mockResolvedValue({
+        request: vi.fn().mockResolvedValue({
+          status: 403,
+          data: { code: "UPGRADE_REQUIRED", upgradeUrl: "/subscription" },
+        }),
+      }),
+    });
+
+    const error = await client.getVideoAllowance("firebase-user-1").catch((cause) => cause);
+    expect(error).toMatchObject({
+      code: "active_subscription_required",
+      retryable: false,
+      status: 403,
+    });
+    expect(JSON.stringify(error)).not.toContain("upgradeUrl");
+    expect(JSON.stringify(error)).not.toContain("/subscription");
   });
 });
