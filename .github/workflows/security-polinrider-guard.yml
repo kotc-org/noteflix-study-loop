@@ -1,0 +1,33 @@
+name: Security - PolinRider guard
+
+on:
+  push: {}
+  pull_request: {}
+  merge_group: {}
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  polinrider-guard:
+    name: Scan for PolinRider and hidden auto-run tasks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out the proposed code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run the static security check
+        shell: bash
+        run: bash scripts/check-polinrider.sh
+
+      - name: Explain a failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "::error title=PolinRider security check failed::This branch contains a PolinRider marker, hidden folder-open task, propagation artifact, known malicious blob, or malicious package reference. Do not merge or bypass this check."
