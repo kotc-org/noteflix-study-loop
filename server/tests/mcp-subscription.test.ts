@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createNoteflixMcpServer } from "../src/mcp.js";
 import { NoteflixApiError, type CreatedPrivateNote } from "../src/noteflix/client.js";
 import { NOTES_CREATE_SCOPE } from "../src/oauth/policy.js";
+import { IdempotencyCoordinator } from "../src/persistence/idempotency.js";
 import { testConfig } from "./fixtures.js";
 
 const UID = "firebase-user-1";
@@ -27,6 +28,22 @@ function unusedMediaMethods() {
     createPublicNoteVideo: vi.fn(),
     getVideoStatus: vi.fn(),
   };
+}
+
+function cachedReceiptStore() {
+  return {
+    reserve: vi.fn().mockResolvedValue({ type: "cached", result: CREATED }),
+    succeed: vi.fn(),
+    fail: vi.fn(),
+  };
+}
+
+function accountEligibilityDenied() {
+  return new NoteflixApiError(
+    "subscription_required",
+    "An active eligible Noteflix account is required.",
+    false,
+  );
 }
 
 const commonServerDependencies = {
@@ -123,5 +140,92 @@ describe("create_private_note subscription gate", () => {
       .toBeLessThan(idempotency.run.mock.invocationCallOrder[0]!);
     expect(idempotency.run.mock.invocationCallOrder[0])
       .toBeLessThan(noteflixClient.createPrivateNote.mock.invocationCallOrder[0]!);
+  });
+
+  it("does not expose an existing cached receipt when current account eligibility is denied", async () => {
+    const noteflixClient = {
+      requireEligibleSubscription: vi.fn().mockRejectedValue(accountEligibilityDenied()),
+      createPrivateNote: vi.fn(),
+      ...unusedMediaMethods(),
+    };
+    const store = cachedReceiptStore();
+
+    const result = await withClient({
+      uid: UID,
+      ...commonServerDependencies,
+      config: testConfig(),
+      idempotency: new IdempotencyCoordinator(store),
+      noteflixClient,
+    }, (client) => client.callTool({ name: "create_private_note", arguments: INPUT }));
+
+    expect(result).toMatchObject({ isError: true });
+    expect(JSON.stringify(result)).toContain("subscription_required");
+    expect(result).not.toHaveProperty("structuredContent");
+    expect(JSON.stringify(result)).not.toContain(CREATED.title);
+    expect(JSON.stringify(result)).not.toContain(CREATED.url);
+    expect(store.reserve).not.toHaveBeenCalled();
+    expect(store.succeed).not.toHaveBeenCalled();
+    expect(store.fail).not.toHaveBeenCalled();
+    expect(noteflixClient.createPrivateNote).not.toHaveBeenCalled();
+  });
+
+  it("withholds cached private metadata when account eligibility is lost during receipt lookup", async () => {
+    const noteflixClient = {
+      requireEligibleSubscription: vi.fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(accountEligibilityDenied()),
+      createPrivateNote: vi.fn(),
+      ...unusedMediaMethods(),
+    };
+    const store = cachedReceiptStore();
+
+    const result = await withClient({
+      uid: UID,
+      ...commonServerDependencies,
+      config: testConfig(),
+      idempotency: new IdempotencyCoordinator(store),
+      noteflixClient,
+    }, (client) => client.callTool({ name: "create_private_note", arguments: INPUT }));
+
+    expect(result).toMatchObject({ isError: true });
+    expect(JSON.stringify(result)).toContain("subscription_required");
+    expect(result).not.toHaveProperty("structuredContent");
+    expect(JSON.stringify(result)).not.toContain(CREATED.title);
+    expect(JSON.stringify(result)).not.toContain(CREATED.url);
+    expect(store.reserve).toHaveBeenCalledOnce();
+    expect(noteflixClient.requireEligibleSubscription).toHaveBeenCalledTimes(2);
+    expect(noteflixClient.requireEligibleSubscription.mock.invocationCallOrder[1])
+      .toBeGreaterThan(store.reserve.mock.invocationCallOrder[0]!);
+    expect(store.succeed).not.toHaveBeenCalled();
+    expect(store.fail).not.toHaveBeenCalled();
+    expect(noteflixClient.createPrivateNote).not.toHaveBeenCalled();
+  });
+
+  it("returns a cached receipt without a write only after current eligibility passes again", async () => {
+    const noteflixClient = {
+      requireEligibleSubscription: vi.fn().mockResolvedValue(undefined),
+      createPrivateNote: vi.fn(),
+      ...unusedMediaMethods(),
+    };
+    const store = cachedReceiptStore();
+
+    const result = await withClient({
+      uid: UID,
+      ...commonServerDependencies,
+      config: testConfig(),
+      idempotency: new IdempotencyCoordinator(store),
+      noteflixClient,
+    }, (client) => client.callTool({ name: "create_private_note", arguments: INPUT }));
+
+    expect(result).toMatchObject({
+      structuredContent: { status: "created", cached: true, note: CREATED },
+    });
+    expect(noteflixClient.requireEligibleSubscription).toHaveBeenCalledTimes(2);
+    expect(store.reserve).toHaveBeenCalledOnce();
+    expect(noteflixClient.requireEligibleSubscription.mock.invocationCallOrder[1])
+      .toBeGreaterThan(store.reserve.mock.invocationCallOrder[0]!);
+    expect(store.succeed).not.toHaveBeenCalled();
+    expect(store.fail).not.toHaveBeenCalled();
+    expect(noteflixClient.createPrivateNote).not.toHaveBeenCalled();
   });
 });

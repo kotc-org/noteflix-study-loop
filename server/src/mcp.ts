@@ -258,6 +258,11 @@ export function createNoteflixMcpServer(dependencies: {
             parsed.data,
           ),
         });
+        if (completed.cached) {
+          // Cached receipts contain private metadata. Recheck the current
+          // account after lookup so deletion or access loss cannot replay it.
+          await dependencies.noteflixClient.requireEligibleSubscription(dependencies.uid);
+        }
         const structuredContent = {
           status: "created" as const,
           cached: completed.cached,
