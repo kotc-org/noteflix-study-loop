@@ -73,7 +73,7 @@ async function callTool(
   const server = createNoteflixMcpServer({
     uid: UID,
     scopes,
-    config: testConfig(),
+    config: testConfig({ ENABLE_VIDEO_TOOLS: "true" }),
     noteflixClient,
     idempotency: { run: vi.fn() },
     generationRateLimit,

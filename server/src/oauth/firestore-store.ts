@@ -6,7 +6,7 @@ import { Timestamp } from "firebase-admin/firestore";
 
 import type { AppConfig } from "../config.js";
 import { decryptSecret, encryptSecret, hashOpaque } from "../security/crypto.js";
-import { validateRegisteredClient } from "./policy.js";
+import { isDurableChatGptPublicClient, validateRegisteredClient } from "./policy.js";
 
 export type AuthorizationRequestRecord = {
   clientId: string;
@@ -67,7 +67,7 @@ export interface OAuthStore extends OAuthRegisteredClientsStore {
 
 type StoredClient = Omit<OAuthClientInformationFull, "client_secret"> & {
   client_secret_ciphertext?: string;
-  registrationExpiresAtMs: number;
+  registrationExpiresAtMs?: number;
 };
 
 const isLive = (record: { expiresAtMs: number; consumedAtMs?: number; revokedAtMs?: number }, now: number) =>
@@ -113,7 +113,13 @@ export class FirestoreOAuthStore implements OAuthStore {
     const snapshot = await this.db.collection(this.names.clients).doc(clientId).get();
     if (!snapshot.exists) return undefined;
     const stored = snapshot.data() as StoredClient;
-    if (stored.registrationExpiresAtMs <= this.now()) return undefined;
+    if (
+      stored.registrationExpiresAtMs !== undefined
+      && (
+        !Number.isFinite(stored.registrationExpiresAtMs)
+        || stored.registrationExpiresAtMs <= this.now()
+      )
+    ) return undefined;
     const {
       client_secret_ciphertext: ciphertext,
       registrationExpiresAtMs: _registrationExpiresAtMs,
@@ -125,6 +131,10 @@ export class FirestoreOAuthStore implements OAuthStore {
       ...(ciphertext ? { client_secret: decryptSecret(ciphertext, this.config.oauthClientSecretEncryptionKey) } : {}),
     };
     validateRegisteredClient(client);
+    if (
+      stored.registrationExpiresAtMs === undefined
+      && !isDurableChatGptPublicClient(client)
+    ) return undefined;
     return client;
   }
 
@@ -136,11 +146,13 @@ export class FirestoreOAuthStore implements OAuthStore {
   ): Promise<OAuthClientInformationFull> {
     validateRegisteredClient(client);
     const { client_secret: secret, ...metadata } = client;
-    const registrationExpiresAtMs =
-      this.now() + this.config.clientRegistrationTtlSeconds * 1000;
+    const durableChatGptClient = isDurableChatGptPublicClient(client);
+    const registrationExpiresAtMs = durableChatGptClient
+      ? undefined
+      : this.now() + this.config.clientRegistrationTtlSeconds * 1000;
     const stored: StoredClient = {
       ...metadata,
-      registrationExpiresAtMs,
+      ...(registrationExpiresAtMs !== undefined ? { registrationExpiresAtMs } : {}),
       ...(secret
         ? { client_secret_ciphertext: encryptSecret(secret, this.config.oauthClientSecretEncryptionKey) }
         : {}),
@@ -150,7 +162,9 @@ export class FirestoreOAuthStore implements OAuthStore {
       .doc(client.client_id)
       .create(withoutUndefined({
         ...stored,
-        deleteAfter: Timestamp.fromMillis(registrationExpiresAtMs),
+        ...(registrationExpiresAtMs !== undefined
+          ? { deleteAfter: Timestamp.fromMillis(registrationExpiresAtMs) }
+          : {}),
       }));
     return client;
   }

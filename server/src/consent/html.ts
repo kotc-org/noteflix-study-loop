@@ -41,6 +41,11 @@ export function buildConsentHtml(
       return `<li><strong>${escapeHtml(label)}</strong><span>${escapeHtml(scope)}</span></li>`;
     })
     .join("");
+  const videoScopesRequested = view.scopes.some((scope) => scope.startsWith("videos:"));
+  const actionDescription = videoScopesRequested ? "note and video actions" : "note actions";
+  const videoPrivacyNotice = videoScopesRequested
+    ? " Generated videos are public only when the public-video permission is used."
+    : "";
   const scriptConfig = safeJson({
     firebase: config.firebaseWebConfig,
     requestToken,
@@ -82,8 +87,8 @@ export function buildConsentHtml(
   <main>
     <div class="brand"><span aria-hidden="true">N</span> NOTEFLIX</div>
     <h1>Connect Noteflix to ${clientName}</h1>
-    <p>Sign in to Noteflix and review these permissions. They apply only to the exact Noteflix account shown below. An active Noteflix subscription is required for note and video actions.</p>
-    <p>Notes created through this connection stay private. Generated videos are public only when the public-video permission is used.</p>
+    <p>Sign in to Noteflix and review these permissions. They apply only to the exact Noteflix account shown below. An active Noteflix subscription is required for ${actionDescription}.</p>
+    <p>Notes created through this connection stay private.${videoPrivacyNotice}</p>
     ${callbackNotice}
     <ul>${scopeItems}</ul>
     <section id="signin">

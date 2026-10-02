@@ -1,0 +1,48 @@
+{
+  "name": "noteflix",
+  "version": "1.0.0",
+  "description": "Turn supplied study material into source-faithful learning aids and, with confirmation, save a private note to Noteflix.",
+  "author": {
+    "name": "Noteflix",
+    "email": "support@noteflix.com",
+    "url": "https://noteflix.com"
+  },
+  "homepage": "https://github.com/kotc-org/noteflix-study-loop#readme",
+  "repository": "https://github.com/kotc-org/noteflix-study-loop",
+  "license": "MIT",
+  "keywords": [
+    "noteflix",
+    "education",
+    "study-guides",
+    "flashcards",
+    "self-testing",
+    "private-notes",
+    "active-recall"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "apps": "./.app.json",
+  "interface": {
+    "displayName": "Noteflix",
+    "shortDescription": "Save private study notes",
+    "longDescription": "Noteflix turns text supplied in the current ChatGPT conversation into source-faithful study guides, flashcards, direct-retrieval practice, quiz-first review, and realistic study plans. It does not inspect uploads, retrieve prior chats, query memory, or search existing Noteflix content. When you explicitly ask to save an artifact, the plugin shows the exact title and Markdown payload and waits for separate confirmation. Only then can it create one private note for the exact OAuth-connected account. It cannot list, read, search, update, publish, share, or delete existing notes, and it does not generate media or offer purchases inside ChatGPT.",
+    "developerName": "Noteflix",
+    "category": "Education & Research",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://chatgpt.noteflix.com/about",
+    "supportURL": "https://chatgpt.noteflix.com/support",
+    "privacyPolicyURL": "https://chatgpt.noteflix.com/privacy",
+    "termsOfServiceURL": "https://chatgpt.noteflix.com/terms",
+    "defaultPrompt": [
+      "Turn the text below into a concise, source-faithful study guide.",
+      "Quiz me on the text below one question at a time.",
+      "Preview the exact private note you would save to Noteflix, then wait for my confirmation."
+    ],
+    "brandColor": "#ED354B",
+    "composerIcon": "./assets/noteflix-icon.png",
+    "logo": "./assets/noteflix-icon.png"
+  }
+}

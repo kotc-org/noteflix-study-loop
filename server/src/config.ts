@@ -3,6 +3,9 @@ import { z } from "zod";
 const positiveInt = (fallback: number) =>
   z.coerce.number().int().positive().default(fallback);
 
+const booleanFlag = (fallback: "true" | "false") =>
+  z.enum(["true", "false"]).default(fallback).transform((value) => value === "true");
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65535).default(8080),
@@ -13,6 +16,7 @@ const envSchema = z.object({
     .default("https://chatgpt.com,https://claude.ai"),
   SERVICE_DOCUMENTATION_URL: z.string().url().default("https://noteflix.com"),
   NOTEFLIX_INTERNAL_AUDIENCE: z.string().url(),
+  NOTEFLIX_VIDEO_INTERNAL_AUDIENCE: z.string().url().optional(),
   NOTEFLIX_APP_BASE_URL: z.string().url().default("https://noteflix.com"),
   FIREBASE_PROJECT_ID: z.string().min(1),
   FIREBASE_WEB_API_KEY: z.string().min(1),
@@ -34,12 +38,15 @@ const envSchema = z.object({
     .string()
     .regex(/^[a-z][a-z0-9_]{2,40}$/)
     .default("noteflix_openai_mcp"),
+  // Non-ChatGPT DCR clients retain a finite cleanup horizon. Public clients
+  // using an exact ChatGPT callback are made durable by the OAuth store.
   OAUTH_CLIENT_REGISTRATION_TTL_SECONDS: positiveInt(2_592_000),
   OAUTH_AUTHORIZATION_REQUEST_TTL_SECONDS: positiveInt(600),
   OAUTH_AUTHORIZATION_CODE_TTL_SECONDS: positiveInt(300),
   OAUTH_ACCESS_TOKEN_TTL_SECONDS: positiveInt(3600),
   OAUTH_REFRESH_TOKEN_TTL_SECONDS: positiveInt(2_592_000),
   MCP_RATE_LIMIT_PER_MINUTE: positiveInt(30),
+  ENABLE_VIDEO_TOOLS: booleanFlag("false"),
   VIDEO_CREATE_RATE_LIMIT_PER_HOUR: positiveInt(3),
   CONSENT_RATE_LIMIT_PER_15_MINUTES: positiveInt(60),
   NOTEFLIX_REQUEST_TIMEOUT_MS: positiveInt(45_000),
@@ -54,6 +61,7 @@ export type AppConfig = {
   mcpAllowedOrigins: ReadonlySet<string>;
   serviceDocumentationUrl: URL;
   noteflixInternalAudience: URL;
+  noteflixVideoInternalAudience: URL;
   noteflixAppBaseUrl: URL;
   firebaseProjectId: string;
   firebaseWebConfig: {
@@ -72,6 +80,7 @@ export type AppConfig = {
   accessTokenTtlSeconds: number;
   refreshTokenTtlSeconds: number;
   mcpRateLimitPerMinute: number;
+  enableVideoTools: boolean;
   videoCreateRateLimitPerHour: number;
   consentRateLimitPer15Minutes: number;
   noteflixRequestTimeoutMs: number;
@@ -112,6 +121,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const publicBaseUrl = normalizedEndpoint(parsed.PUBLIC_BASE_URL, "PUBLIC_BASE_URL");
   const mcpResourceUrl = normalizedEndpoint(parsed.MCP_RESOURCE_URL, "MCP_RESOURCE_URL");
   const noteflixInternalAudience = normalizedEndpoint(parsed.NOTEFLIX_INTERNAL_AUDIENCE, "NOTEFLIX_INTERNAL_AUDIENCE");
+  const noteflixVideoInternalAudience = normalizedEndpoint(
+    parsed.NOTEFLIX_VIDEO_INTERNAL_AUDIENCE ?? parsed.NOTEFLIX_INTERNAL_AUDIENCE,
+    "NOTEFLIX_VIDEO_INTERNAL_AUDIENCE",
+  );
   const noteflixAppBaseUrl = normalizedEndpoint(parsed.NOTEFLIX_APP_BASE_URL, "NOTEFLIX_APP_BASE_URL");
 
   if (publicBaseUrl.pathname !== "/") {
@@ -126,6 +139,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (noteflixInternalAudience.pathname !== "/") {
     throw new Error("NOTEFLIX_INTERNAL_AUDIENCE must be an origin URL with no path");
   }
+  if (noteflixVideoInternalAudience.pathname !== "/") {
+    throw new Error("NOTEFLIX_VIDEO_INTERNAL_AUDIENCE must be an origin URL with no path");
+  }
+  if (parsed.ENABLE_VIDEO_TOOLS && !parsed.NOTEFLIX_VIDEO_INTERNAL_AUDIENCE) {
+    throw new Error("NOTEFLIX_VIDEO_INTERNAL_AUDIENCE is required when ENABLE_VIDEO_TOOLS=true");
+  }
   if (parsed.NODE_ENV === "production" && parsed.FIRESTORE_DATABASE_ID === "(default)") {
     throw new Error("FIRESTORE_DATABASE_ID must select a named database in production");
   }
@@ -134,6 +153,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       ["PUBLIC_BASE_URL", publicBaseUrl],
       ["MCP_RESOURCE_URL", mcpResourceUrl],
       ["NOTEFLIX_INTERNAL_AUDIENCE", noteflixInternalAudience],
+      ["NOTEFLIX_VIDEO_INTERNAL_AUDIENCE", noteflixVideoInternalAudience],
       ["NOTEFLIX_APP_BASE_URL", noteflixAppBaseUrl],
       ["SERVICE_DOCUMENTATION_URL", new URL(parsed.SERVICE_DOCUMENTATION_URL)],
     ] as const) {
@@ -156,6 +176,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     mcpAllowedOrigins: parseAllowedOrigins(parsed.MCP_ALLOWED_ORIGINS, publicBaseUrl.origin),
     serviceDocumentationUrl: new URL(parsed.SERVICE_DOCUMENTATION_URL),
     noteflixInternalAudience,
+    noteflixVideoInternalAudience,
     noteflixAppBaseUrl,
     firebaseProjectId: parsed.FIREBASE_PROJECT_ID,
     firebaseWebConfig: {
@@ -176,6 +197,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     accessTokenTtlSeconds: parsed.OAUTH_ACCESS_TOKEN_TTL_SECONDS,
     refreshTokenTtlSeconds: parsed.OAUTH_REFRESH_TOKEN_TTL_SECONDS,
     mcpRateLimitPerMinute: parsed.MCP_RATE_LIMIT_PER_MINUTE,
+    enableVideoTools: parsed.ENABLE_VIDEO_TOOLS,
     videoCreateRateLimitPerHour: parsed.VIDEO_CREATE_RATE_LIMIT_PER_HOUR,
     consentRateLimitPer15Minutes: parsed.CONSENT_RATE_LIMIT_PER_15_MINUTES,
     noteflixRequestTimeoutMs: parsed.NOTEFLIX_REQUEST_TIMEOUT_MS,

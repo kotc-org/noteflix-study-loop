@@ -47,7 +47,7 @@ Never create an `all topics`, `mixed check`, or multi-topic row when only topic 
 
 1. Gather the deadline, topics, available minutes or study windows, and hard constraints. Ask only for missing information that materially changes the plan.
 2. If information remains missing, make conservative assumptions and list them prominently.
-3. Read [learning integrity and source handling](../../references/learning-integrity.md) and the [review planning heuristics](references/planning-heuristics.md).
+3. Read [learning integrity and source handling](references/learning-integrity.md) and the [review planning heuristics](references/planning-heuristics.md).
 4. Prioritize user-identified weak or important topics. Use supplied quiz results when available; never invent performance evidence or predict exam content.
 5. Sequence diagnostic retrieval, targeted correction, spaced re-checks when time permits, and a final mixed check.
 6. Assign every session a duration, concrete task, source or topic, and observable “done when” criterion. If no source text was supplied, keep the task content-neutral and make the criterion procedural, such as completing a requested number of source-checked retrieval prompts—not demonstrating an invented fact.

@@ -24,6 +24,7 @@ import type { NoteflixIdentityVerifier } from "./identity.js";
 import {
   defaultScopesForRedirectUri,
   normalizeScopes,
+  NOTES_CREATE_SCOPE,
   OFFLINE_ACCESS_SCOPE,
   requireExactResource,
   trustedClientDisplayName,
@@ -63,7 +64,8 @@ export class NoteflixOAuthProvider implements OAuthServerProvider {
     const scopes = normalizeScopes(
       params.scopes && params.scopes.length > 0
         ? params.scopes
-        : defaultScopesForRedirectUri(params.redirectUri),
+        : defaultScopesForRedirectUri(params.redirectUri, this.config.enableVideoTools),
+      this.config.enableVideoTools,
     );
     const resource = requireExactResource(params.resource, this.config.mcpResourceUrl);
     const requestToken = opaqueToken();
@@ -176,7 +178,14 @@ export class NoteflixOAuthProvider implements OAuthServerProvider {
     resource?: URL,
   ): Promise<OAuthTokens> {
     const target = requireExactResource(resource, this.config.mcpResourceUrl);
-    const nextScopes = !scopes || scopes.length === 0 ? undefined : normalizeScopes(scopes);
+    const nextScopes = !scopes || scopes.length === 0
+      ? this.config.enableVideoTools
+        ? undefined
+        : normalizeScopes(
+            [NOTES_CREATE_SCOPE, OFFLINE_ACCESS_SCOPE],
+            this.config.enableVideoTools,
+          )
+      : normalizeScopes(scopes, this.config.enableVideoTools);
     const nextRefreshToken = opaqueToken();
     const rotated = await this.clientsStore.rotateRefreshToken(
       refreshToken,

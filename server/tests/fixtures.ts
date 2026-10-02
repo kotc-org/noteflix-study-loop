@@ -8,7 +8,10 @@ export function testConfig(overrides: Record<string, string> = {}): AppConfig {
     MCP_RESOURCE_URL: "http://localhost:8080/mcp",
     MCP_ALLOWED_ORIGINS: "https://claude.ai",
     SERVICE_DOCUMENTATION_URL: "https://noteflix.com/docs",
-    NOTEFLIX_INTERNAL_AUDIENCE: "https://ainotes.noteflix.test",
+    NOTEFLIX_INTERNAL_AUDIENCE: "https://openai-internal.noteflix.test",
+    ...(overrides.ENABLE_VIDEO_TOOLS === "true"
+      ? { NOTEFLIX_VIDEO_INTERNAL_AUDIENCE: "https://ainotes.noteflix.test" }
+      : {}),
     NOTEFLIX_APP_BASE_URL: "https://noteflix.test",
     FIREBASE_PROJECT_ID: "noteflix-test",
     FIREBASE_WEB_API_KEY: "test-web-api-key",

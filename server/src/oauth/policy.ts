@@ -13,6 +13,7 @@ export const ACTION_SCOPES = [
   VIDEOS_PUBLISH_SCOPE,
 ] as const;
 export const SUPPORTED_SCOPES = [...ACTION_SCOPES, OFFLINE_ACCESS_SCOPE] as const;
+const NOTE_ONLY_ACTION_SCOPES = [NOTES_CREATE_SCOPE] as const;
 const CLAUDE_HOSTED_CALLBACK = "https://claude.ai/api/mcp/auth_callback";
 const CHATGPT_CALLBACK_ORIGIN = "https://chatgpt.com";
 const CHATGPT_CALLBACK_PATH = /^\/connector\/oauth\/[A-Za-z0-9_-]{1,200}$/;
@@ -39,16 +40,50 @@ function classifyTrustedCallback(url: URL): TrustedCallback | undefined {
   return undefined;
 }
 
-export function normalizeScopes(requested: string[] | undefined): string[] {
-  const scopes = requested && requested.length > 0 ? [...new Set(requested)] : [...ACTION_SCOPES];
-  const invalid = scopes.filter((scope) => !SUPPORTED_SCOPES.includes(scope as (typeof SUPPORTED_SCOPES)[number]));
+export function actionScopes(enableVideoTools = false): string[] {
+  return enableVideoTools ? [...ACTION_SCOPES] : [...NOTE_ONLY_ACTION_SCOPES];
+}
+
+export function isDurableChatGptPublicClient(
+  client: Pick<
+    OAuthClientInformationFull,
+    "redirect_uris" | "token_endpoint_auth_method" | "client_secret" | "software_id"
+  >,
+): boolean {
+  if (
+    client.token_endpoint_auth_method !== "none"
+    || client.client_secret !== undefined
+    || client.software_id === "noteflix-production-readonly-verifier"
+    || client.redirect_uris.length !== 1
+  ) {
+    return false;
+  }
+  try {
+    return classifyTrustedCallback(new URL(client.redirect_uris[0]!)) === "chatgpt";
+  } catch {
+    return false;
+  }
+}
+
+export function supportedScopes(enableVideoTools = false): string[] {
+  return [...actionScopes(enableVideoTools), OFFLINE_ACCESS_SCOPE];
+}
+
+export function normalizeScopes(
+  requested: string[] | undefined,
+  enableVideoTools = false,
+): string[] {
+  const actions = actionScopes(enableVideoTools);
+  const supported = supportedScopes(enableVideoTools);
+  const scopes = requested && requested.length > 0 ? [...new Set(requested)] : actions;
+  const invalid = scopes.filter((scope) => !supported.includes(scope));
   if (invalid.length > 0) {
     throw new InvalidScopeError(`Unsupported scope: ${invalid[0]}`);
   }
-  if (!scopes.some((scope) => ACTION_SCOPES.includes(scope as (typeof ACTION_SCOPES)[number]))) {
+  if (!scopes.some((scope) => actions.includes(scope))) {
     throw new InvalidScopeError("At least one Noteflix action scope is required");
   }
-  return SUPPORTED_SCOPES.filter((scope) => scopes.includes(scope));
+  return supported.filter((scope) => scopes.includes(scope));
 }
 
 export function trustedClientDisplayName(redirectUri: string): string {
@@ -67,7 +102,10 @@ export function trustedClientDisplayName(redirectUri: string): string {
   }
 }
 
-export function defaultScopesForRedirectUri(redirectUri: string): string[] {
+export function defaultScopesForRedirectUri(
+  redirectUri: string,
+  enableVideoTools = false,
+): string[] {
   let url: URL;
   try {
     url = new URL(redirectUri);
@@ -78,7 +116,7 @@ export function defaultScopesForRedirectUri(redirectUri: string): string[] {
   if (!callback) {
     throw new InvalidClientMetadataError("Redirect URI is not a trusted ChatGPT, Claude, or loopback callback");
   }
-  return callback === "chatgpt" ? [...ACTION_SCOPES] : [NOTES_CREATE_SCOPE];
+  return callback === "chatgpt" ? actionScopes(enableVideoTools) : [NOTES_CREATE_SCOPE];
 }
 
 export function requireExactResource(requested: URL | undefined, configured: URL): URL {

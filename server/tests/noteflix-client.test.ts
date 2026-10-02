@@ -18,16 +18,16 @@ describe("Noteflix production API adapter", () => {
 
     await expect(client.requireEligibleSubscription("firebase-user-1")).resolves.toBeUndefined();
 
-    expect(serviceIdentity.getIdTokenClient).toHaveBeenCalledWith("https://ainotes.noteflix.test");
+    expect(serviceIdentity.getIdTokenClient).toHaveBeenCalledWith("https://openai-internal.noteflix.test");
     expect(request).toHaveBeenCalledTimes(1);
     const preflight = request.mock.calls[0]![0];
     expect(preflight).toMatchObject({
-      url: "https://ainotes.noteflix.test/internal/claude-mcp/subscription-eligibility",
+      url: "https://openai-internal.noteflix.test/internal/openai-mcp/subscription-eligibility",
       method: "GET",
       timeout: testConfig().noteflixRequestTimeoutMs,
     });
     const headers = new Headers(preflight.headers);
-    expect(headers.get("x-noteflix-integration")).toBe("claude-mcp");
+    expect(headers.get("x-noteflix-integration")).toBe("openai-mcp");
     expect(headers.get("x-noteflix-user-id")).toBe("firebase-user-1");
     expect(preflight.data).toBeUndefined();
   });
@@ -97,9 +97,9 @@ describe("Noteflix production API adapter", () => {
     });
 
     const created = await client.createPrivateNote("firebase-user-1", input);
-    expect(serviceIdentity.getIdTokenClient).toHaveBeenCalledWith("https://ainotes.noteflix.test");
+    expect(serviceIdentity.getIdTokenClient).toHaveBeenCalledWith("https://openai-internal.noteflix.test");
     const noteInit = request.mock.calls[0]![0];
-    expect(noteInit.url).toBe("https://ainotes.noteflix.test/internal/claude-mcp/ai-notes");
+    expect(noteInit.url).toBe("https://openai-internal.noteflix.test/internal/openai-mcp/ai-notes");
     const payload = noteInit.data;
     expect(payload).toMatchObject({
       noteflixUserId: "firebase-user-1",
@@ -110,11 +110,12 @@ describe("Noteflix production API adapter", () => {
       isVisible: false,
       isPublic: false,
       visibility: "private",
-      integrationSource: "claude-mcp",
+      integrationSource: "openai-mcp",
       derivedAssets: [],
     });
     expect(Object.keys(payload)).not.toContain("userId");
     expect(new Headers(noteInit.headers).get("idempotency-key")).toBe(input.request_id);
+    expect(new Headers(noteInit.headers).get("x-noteflix-user-id")).toBe(payload.noteflixUserId);
     expect(created).toEqual({
       id: "note-123",
       title: "Cell membranes",
@@ -241,7 +242,7 @@ describe("Noteflix production API adapter", () => {
         periodEnd: "2026-08-01T00:00:00.000Z",
       },
     });
-    const client = new NoteflixClient(testConfig(), {
+    const client = new NoteflixClient(testConfig({ ENABLE_VIDEO_TOOLS: "true" }), {
       getIdTokenClient: vi.fn().mockResolvedValue({ request }),
     });
 
@@ -271,7 +272,7 @@ describe("Noteflix production API adapter", () => {
   });
 
   it("fails closed when a video allowance response is for a different UID", async () => {
-    const client = new NoteflixClient(testConfig(), {
+    const client = new NoteflixClient(testConfig({ ENABLE_VIDEO_TOOLS: "true" }), {
       getIdTokenClient: vi.fn().mockResolvedValue({
         request: vi.fn().mockResolvedValue({
           status: 200,
@@ -312,7 +313,7 @@ describe("Noteflix production API adapter", () => {
         privacy: "public",
       },
     });
-    const client = new NoteflixClient(testConfig(), {
+    const client = new NoteflixClient(testConfig({ ENABLE_VIDEO_TOOLS: "true" }), {
       getIdTokenClient: vi.fn().mockResolvedValue({ request }),
     });
     const input = createPublicNoteVideoInputSchema.parse({
@@ -381,7 +382,7 @@ describe("Noteflix production API adapter", () => {
   ] as const)(
     "maps public privacy or safety failure %s %s without exposing the backend body",
     async (status, backendCode, expectedCode, retryable) => {
-      const client = new NoteflixClient(testConfig(), {
+      const client = new NoteflixClient(testConfig({ ENABLE_VIDEO_TOOLS: "true" }), {
         getIdTokenClient: vi.fn().mockResolvedValue({
           request: vi.fn().mockResolvedValue({
             status,
@@ -426,7 +427,7 @@ describe("Noteflix production API adapter", () => {
         privacy: "public",
       },
     });
-    const client = new NoteflixClient(testConfig(), {
+    const client = new NoteflixClient(testConfig({ ENABLE_VIDEO_TOOLS: "true" }), {
       getIdTokenClient: vi.fn().mockResolvedValue({ request }),
     });
 
@@ -448,7 +449,7 @@ describe("Noteflix production API adapter", () => {
   });
 
   it("returns a neutral gate for ineligible video accounts without an upgrade URL", async () => {
-    const client = new NoteflixClient(testConfig(), {
+    const client = new NoteflixClient(testConfig({ ENABLE_VIDEO_TOOLS: "true" }), {
       getIdTokenClient: vi.fn().mockResolvedValue({
         request: vi.fn().mockResolvedValue({
           status: 403,

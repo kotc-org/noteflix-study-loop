@@ -2,23 +2,28 @@ import { describe, expect, it } from "vitest";
 
 import {
   defaultScopesForRedirectUri,
+  isDurableChatGptPublicClient,
   normalizeScopes,
   requireExactResource,
+  supportedScopes,
   trustedClientDisplayName,
   validateRegisteredClient,
 } from "../src/oauth/policy.js";
 
 describe("OAuth policy", () => {
-  it("defaults to every action scope and permits least-privilege action grants", () => {
-    expect(normalizeScopes(undefined)).toEqual([
+  it("defaults to note-only scopes and enables video scopes only behind the flag", () => {
+    expect(normalizeScopes(undefined)).toEqual(["notes:create"]);
+    expect(supportedScopes()).toEqual(["notes:create", "offline_access"]);
+    expect(normalizeScopes(undefined, true)).toEqual([
       "notes:create",
       "videos:create",
       "videos:read",
       "videos:publish",
     ]);
     expect(normalizeScopes(["offline_access", "notes:create"])).toEqual(["notes:create", "offline_access"]);
-    expect(normalizeScopes(["videos:read"])).toEqual(["videos:read"]);
-    expect(normalizeScopes(["videos:publish", "videos:create", "videos:create"])).toEqual([
+    expect(() => normalizeScopes(["videos:read"])).toThrow(/Unsupported scope/);
+    expect(normalizeScopes(["videos:read"], true)).toEqual(["videos:read"]);
+    expect(normalizeScopes(["videos:publish", "videos:create", "videos:create"], true)).toEqual([
       "videos:create",
       "videos:publish",
     ]);
@@ -55,6 +60,49 @@ describe("OAuth policy", () => {
     expect(() => validateRegisteredClient({ ...base, redirect_uris: ["https://claude.ai/api/mcp/auth_callback#fragment"] })).toThrow(/fragment/);
   });
 
+  it("makes only public clients with exclusively exact ChatGPT callbacks durable", () => {
+    const chatgpt = {
+      redirect_uris: ["https://chatgpt.com/connector/oauth/callback_123-ABC"],
+      token_endpoint_auth_method: "none",
+    };
+    expect(isDurableChatGptPublicClient(chatgpt)).toBe(true);
+    expect(isDurableChatGptPublicClient({
+      ...chatgpt,
+      redirect_uris: [
+        ...chatgpt.redirect_uris,
+        "https://chatgpt.com/connector/oauth/callback_456",
+      ],
+    })).toBe(false);
+    expect(isDurableChatGptPublicClient({
+      ...chatgpt,
+      token_endpoint_auth_method: "client_secret_post",
+      client_secret: "confidential-client-secret",
+    })).toBe(false);
+    expect(isDurableChatGptPublicClient({
+      ...chatgpt,
+      client_secret: "unexpected-public-secret",
+    })).toBe(false);
+    expect(isDurableChatGptPublicClient({
+      ...chatgpt,
+      redirect_uris: ["https://claude.ai/api/mcp/auth_callback"],
+    })).toBe(false);
+    expect(isDurableChatGptPublicClient({
+      ...chatgpt,
+      redirect_uris: [
+        ...chatgpt.redirect_uris,
+        "http://127.0.0.1:49152/callback",
+      ],
+    })).toBe(false);
+    expect(isDurableChatGptPublicClient({
+      ...chatgpt,
+      redirect_uris: ["https://chatgpt.com.evil.test/connector/oauth/callback_123"],
+    })).toBe(false);
+    expect(isDurableChatGptPublicClient({
+      ...chatgpt,
+      software_id: "noteflix-production-readonly-verifier",
+    })).toBe(false);
+  });
+
   it("derives display names only from a validated callback destination", () => {
     expect(trustedClientDisplayName("https://chatgpt.com/connector/oauth/callback_123")).toBe("ChatGPT");
     expect(trustedClientDisplayName("https://claude.ai/api/mcp/auth_callback")).toBe("Claude");
@@ -63,10 +111,11 @@ describe("OAuth policy", () => {
     expect(() => trustedClientDisplayName("https://chatgpt.com/connector/oauth/callback_123?next=evil")).toThrow(/not a trusted/);
   });
 
-  it("keeps scope-less Claude clients note-only and defaults ChatGPT to unified actions", () => {
+  it("keeps all scope-less clients note-only unless ChatGPT video mode is enabled", () => {
     expect(defaultScopesForRedirectUri("https://claude.ai/api/mcp/auth_callback")).toEqual(["notes:create"]);
     expect(defaultScopesForRedirectUri("http://127.0.0.1:49152/callback")).toEqual(["notes:create"]);
-    expect(defaultScopesForRedirectUri("https://chatgpt.com/connector/oauth/callback_123")).toEqual([
+    expect(defaultScopesForRedirectUri("https://chatgpt.com/connector/oauth/callback_123")).toEqual(["notes:create"]);
+    expect(defaultScopesForRedirectUri("https://chatgpt.com/connector/oauth/callback_123", true)).toEqual([
       "notes:create",
       "videos:create",
       "videos:read",

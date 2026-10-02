@@ -48,7 +48,7 @@ export function createConsentRouter(config: AppConfig, provider: NoteflixOAuthPr
       "Cache-Control": "no-store",
       "Content-Security-Policy": [
         "default-src 'none'",
-        `script-src 'nonce-${nonce}' https://www.gstatic.com`,
+        `script-src 'nonce-${nonce}' https://www.gstatic.com https://apis.google.com`,
         `style-src 'nonce-${nonce}'`,
         "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.googleapis.com",
         `frame-src https://accounts.google.com https://*.firebaseapp.com https://${config.firebaseWebConfig.authDomain}`,

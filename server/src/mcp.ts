@@ -160,7 +160,9 @@ export function createNoteflixMcpServer(dependencies: {
   generationRateLimit: () => Promise<{ allowed: boolean; retryAfterSeconds: number }>;
 }): McpServer {
   const server = new McpServer({
-    name: "noteflix-study-and-video",
+    name: dependencies.config.enableVideoTools
+      ? "noteflix-study-and-video"
+      : "noteflix",
     version: "1.0.0",
   });
   const createNoteInputSchema = createPrivateNoteInputSchema(
@@ -283,6 +285,11 @@ export function createNoteflixMcpServer(dependencies: {
       }
     },
   );
+
+  if (!dependencies.config.enableVideoTools) {
+    installToolSecuritySchemeCompatibility(server);
+    return server;
+  }
 
   server.registerTool(
     "get_video_allowance",

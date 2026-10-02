@@ -15,6 +15,7 @@ const reviewerSecret = process.env.REVIEWER_SECRET_NAME;
 const transportOrigin = process.env.MCP_TRANSPORT_ORIGIN;
 const publicOrigin = process.env.MCP_PUBLIC_ORIGIN;
 const fixtureMode = process.argv.includes("--create-review-fixture");
+const videoMode = process.env.ENABLE_VIDEO_TOOLS === "true";
 const fixtureSecret = process.env.FIXTURE_SECRET_NAME;
 const foreignReviewerSecret = process.env.FOREIGN_REVIEWER_SECRET_NAME;
 const primaryReviewerSecret = "noteflix-anthropic-reviewer-credentials";
@@ -36,6 +37,12 @@ if (!reviewerSecret || !transportOrigin || !publicOrigin) {
   throw new Error(
     "REVIEWER_SECRET_NAME, MCP_TRANSPORT_ORIGIN, and MCP_PUBLIC_ORIGIN are required.",
   );
+}
+if (
+  fixtureMode
+  && !videoMode
+) {
+  throw new Error("Fixture mode requires ENABLE_VIDEO_TOOLS=true.");
 }
 if (
   fixtureMode
@@ -84,15 +91,19 @@ if (
 
 const resource = new URL("/mcp", publicBase).href;
 const callback = "https://chatgpt.com/connector/oauth/noteflix_readonly_verifier";
-const scopes = fixtureMode
-  ? ["notes:create", "videos:create", "videos:read", "videos:publish"]
-  : ["videos:read"];
-const expectedTools = [
-  "create_private_note",
-  "create_public_note_video",
-  "get_video_allowance",
-  "get_video_status",
-];
+const scopes = videoMode
+  ? fixtureMode
+    ? ["notes:create", "videos:create", "videos:read", "videos:publish"]
+    : ["videos:read"]
+  : ["notes:create"];
+const expectedTools = videoMode
+  ? [
+      "create_private_note",
+      "create_public_note_video",
+      "get_video_allowance",
+      "get_video_status",
+    ]
+  : ["create_private_note"];
 const allowanceKeys = [
   "can_generate",
   "completed",
@@ -221,6 +232,26 @@ async function verifyOAuthTokenBinding(accessToken, identity, clientId) {
       fail("The OAuth access-token record was not bound to the exact signed-in reviewer UID.");
     }
     return true;
+  });
+}
+
+async function deleteVerifierClient(clientId) {
+  await withFirestore(oauthDatabaseId, async (firestore) => {
+    const reference = firestore
+      .collection(`${oauthCollectionPrefix}_oauth_clients`)
+      .doc(clientId);
+    const snapshot = await reference.get();
+    if (!snapshot.exists) return;
+    const client = snapshot.data();
+    if (
+      client?.software_id !== "noteflix-production-readonly-verifier"
+      || client?.token_endpoint_auth_method !== "none"
+      || client?.client_secret_ciphertext !== undefined
+      || JSON.stringify(client?.redirect_uris) !== JSON.stringify([callback])
+    ) {
+      fail("Refused to delete a client that did not match the production verifier registration.");
+    }
+    await reference.delete();
   });
 }
 
@@ -1845,6 +1876,16 @@ async function verifyMcp(accessToken, identity, clientId) {
         fail(`Tool ${tool.name} did not mirror its OAuth security scheme.`);
       }
     }
+    if (!videoMode) {
+      return {
+        tool_count: catalog.tools.length,
+        oauth_schemes_mirrored: true,
+        oauth_schemes_exact: true,
+        exact_user_token_bound: exactUserTokenBound,
+        note_only_catalog: true,
+      };
+    }
+
     const publicVideo = catalog.tools.find((tool) => tool.name === "create_public_note_video");
     if (
       publicVideo?.annotations?.readOnlyHint !== false
@@ -1946,5 +1987,8 @@ try {
 } finally {
   if (clientId && accessToken) {
     await revoke(clientId, accessToken).catch(() => undefined);
+  }
+  if (clientId) {
+    await deleteVerifierClient(clientId);
   }
 }

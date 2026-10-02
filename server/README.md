@@ -1,10 +1,15 @@
 # Noteflix OpenAI MCP gateway
 
-Production Node 20 / TypeScript gateway for connecting ChatGPT and other trusted MCP clients to the user's real Noteflix account. It exposes four narrow tools:
+Production Node 20 / TypeScript gateway for connecting ChatGPT and other trusted MCP clients to the user's real Noteflix account. The safe launch configuration exposes one narrow tool:
 
 | Tool | Effect | OAuth scopes |
 | --- | --- | --- |
 | `create_private_note` | Saves one private note | `notes:create` |
+
+`ENABLE_VIDEO_TOOLS` defaults to `false`. In this mode, the three video tools are not registered, video scopes are not advertised or grantable, and scope-less ChatGPT clients receive only `notes:create`. A later, separately verified rollout can set the flag to `true` to add:
+
+| Optional tool | Effect | OAuth scopes |
+| --- | --- | --- |
 | `get_video_allowance` | Reads the user's current video allowance | `videos:read` |
 | `create_public_note_video` | Consumes the connected user's allowance to queue a public, shareable study video from one of their notes | `videos:create`, `videos:publish` |
 | `get_video_status` | Reads rendering status for one of the user's videos | `videos:read` |
@@ -29,7 +34,7 @@ Unauthenticated MCP requests return `401` with a `WWW-Authenticate` link to the 
 
 OAuth consent uses the same Firebase Authentication project as Noteflix. The gateway validates the presented Firebase ID token through Identity Toolkit and binds the grant to that token's exact Firebase UID. A caller cannot provide or override a UID in tool input.
 
-Every action applies only to the connected UID. The gateway calls service-identity-protected Noteflix routes, and the backend independently verifies both the dedicated gateway service account and exact user identity. The backend remains authoritative for current subscription eligibility, note ownership, video allowance, idempotency, moderation, and publication state.
+Every action applies only to the connected UID. The note-only gateway calls the dedicated service-identity-protected `/internal/openai-mcp/subscription-eligibility` and `/internal/openai-mcp/ai-notes` routes with `x-noteflix-integration: openai-mcp`; stored notes use `integrationSource: openai-mcp`. The backend independently verifies both the dedicated gateway service account and exact user identity. It remains authoritative for current subscription eligibility, note idempotency, restricted-data checks, and the private write.
 
 An existing eligible Noteflix account is required. The tools do not offer, sell, link to, or manage a subscription in ChatGPT. An ineligible account receives a neutral eligibility error.
 
@@ -62,7 +67,7 @@ Tool responses return only allowlisted fields. Public videos use `https://notefl
 ## OAuth and trust boundaries
 
 - Trusted hosted callbacks are the documented ChatGPT callback form `https://chatgpt.com/connector/oauth/{callback_id}` and the exact Claude callback `https://claude.ai/api/mcp/auth_callback`. Local development additionally permits HTTP loopback `/callback` URIs on `localhost`, `127.0.0.1`, and `[::1]`.
-- ChatGPT defaults to all four action scopes. Claude and loopback registrations default to private-note access only unless they explicitly request a supported narrower or broader scope set.
+- Every client defaults to private-note access only while `ENABLE_VIDEO_TOOLS=false`. When video mode is explicitly enabled, ChatGPT defaults to all four action scopes; Claude and loopback registrations remain private-note only unless they request supported video scopes.
 - Public clients use PKCE S256. Confidential dynamic-registration secrets are AES-256-GCM encrypted at rest.
 - Authorization requests, codes, access tokens, refresh tokens, and idempotency records are opaque. Firestore document IDs contain SHA-256 hashes, not plaintext tokens.
 - Refresh tokens rotate on use; revoked or replaced credentials cannot be reused.
@@ -101,10 +106,11 @@ curl http://localhost:8080/.well-known/oauth-protected-resource/mcp
 3. Store one stable 32-byte `OAUTH_CLIENT_SECRET_ENCRYPTION_KEY` in Secret Manager. Treat it and all OAuth tokens as credentials.
 4. Set `PUBLIC_BASE_URL` to the final HTTPS origin and `MCP_RESOURCE_URL` to that origin plus `/mcp`. Changing either identifier invalidates existing OAuth relationships.
 5. Configure the exact internal Cloud Run audience, Noteflix app origin, Firebase Web Auth values, documentation URL, and trusted client origins from `.env.example`.
-6. Add the production custom domain to Firebase Authentication's authorized domains.
-7. Configure Firestore TTL on `deleteAfter` for short-lived OAuth, idempotency, and rate-limit documents. Every lookup also enforces expiry synchronously.
-8. When OpenAI provides the domain-verification value, set `OPENAI_APPS_CHALLENGE_TOKEN`; the challenge route returns that value alone as plain text.
-9. Verify discovery, DCR, PKCE, consent, scoped reconnect challenges, token rotation/revocation, origin rejection, ineligible-account denial, a real private note, allowance status, and a separately confirmed public render before submission.
+6. Keep `ENABLE_VIDEO_TOOLS=false` for the note-only launch. Enable it only after the dedicated video backend and complete reviewer flow pass against production.
+7. Add the production custom domain to Firebase Authentication's authorized domains.
+8. Configure Firestore TTL on `deleteAfter` for short-lived OAuth, idempotency, and rate-limit documents. Exact public ChatGPT DCR registrations deliberately omit `deleteAfter` so an installed connector remains registered; every other client registration and all requests, codes, tokens, idempotency records, and rate-limit records retain finite expiry. Every lookup also enforces expiry synchronously.
+9. When OpenAI provides the domain-verification value, set `OPENAI_APPS_CHALLENGE_TOKEN`; the challenge route returns that value alone as plain text.
+10. Verify discovery, DCR, PKCE, consent, scoped reconnect challenges, token rotation/revocation, origin rejection, ineligible-account denial, and a real private note before note-only submission. If video mode is enabled later, also verify allowance status and a separately confirmed public render.
 
 Build the production container with:
 
@@ -114,13 +120,14 @@ docker build -t noteflix-openai-mcp .
 
 ## Configuration
 
-See `.env.example`. Production requires HTTPS for public, MCP, internal-audience, app, and documentation URLs. `PUBLIC_BASE_URL` must be an origin with no path; `MCP_RESOURCE_URL` must use the same origin and exact `/mcp` path. `NOTEFLIX_INTERNAL_AUDIENCE` must be an origin-only Cloud Run audience. Production rejects the default Firestore database.
+See `.env.example`. Production requires HTTPS for public, MCP, internal-audience, app, and documentation URLs. `PUBLIC_BASE_URL` must be an origin with no path; `MCP_RESOURCE_URL` must use the same origin and exact `/mcp` path. `NOTEFLIX_INTERNAL_AUDIENCE` is the dedicated origin-only OpenAI note-function audience. `ENABLE_VIDEO_TOOLS` accepts only `true` or `false` and defaults to the safer note-only catalog. If video mode is explicitly enabled later, `NOTEFLIX_VIDEO_INTERNAL_AUDIENCE` is required so the optional media routes keep their separate audience. Production rejects the default Firestore database.
 
 ## Tests
 
 `npm run check` performs strict TypeScript checking, unit/contract tests, and a production build. Coverage includes:
 
 - strict note/video schemas and allowlisted downstream payloads;
+- note-only tool and OAuth catalogs by default, plus the explicitly enabled four-tool mode;
 - tool catalog descriptions, annotations, OAuth security metadata, and per-tool scope challenges;
 - exact OAuth resource binding, ChatGPT/Claude callback validation, PKCE, rotation, and revocation;
 - Firebase-UID binding and fail-closed subscription checks;
@@ -133,7 +140,7 @@ Tests do not send content to Noteflix, Firebase, or OpenAI.
 
 ## Production read-only and reviewer-fixture verifier
 
-`scripts/verify-production-readonly.mjs` exercises production DCR, PKCE consent, exact-user eligibility, the four-tool catalog, wire-level OAuth metadata, unchanged allowance reads, token revocation, and post-revocation denial. It retrieves the dedicated reviewer credential from Secret Manager without printing it and emits only booleans and truncated one-way fixture hashes.
+`scripts/verify-production-readonly.mjs` exercises production DCR, PKCE consent, the configured tool catalog, wire-level OAuth metadata, token revocation, and post-revocation denial. Its default checks the one-tool note-only catalog. Set `ENABLE_VIDEO_TOOLS=true` in the verifier environment only when the deployed gateway intentionally exposes video mode; that mode also checks exact-user eligibility and unchanged allowance reads. It retrieves the dedicated reviewer credential from Secret Manager without printing it and emits only booleans and truncated one-way fixture hashes.
 
 With `--create-review-fixture`, an additional exact confirmation value is required before the script may create one harmless private reviewer note and one explicitly public reviewer video. Deterministic request IDs prevent duplicate creation or charging. The script checkpoints the private-note and queued-video receipts in Secret Manager before continuing, so an interrupted render can resume without treating an idempotent replay as a new charge. The private note ID, ready video ID and URL, exact counterpart-account denial ID, historical allowance snapshot, and current verification snapshot are stored only in the configured fixture secret. Later runs reuse that stored fixture without another video charge, including after a UTC allowance rollover, and verify signed-out public watch/metadata/playback behavior plus signed-out private-note denial.
 

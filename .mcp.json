@@ -2,7 +2,7 @@
   "mcpServers": {
     "noteflix": {
       "type": "http",
-      "url": "https://noteflix.com/mcp"
+      "url": "https://chatgpt.noteflix.com/mcp"
     }
   }
 }
