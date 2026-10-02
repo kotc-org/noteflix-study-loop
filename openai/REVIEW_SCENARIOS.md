@@ -1,123 +1,177 @@
 # Reviewer scenarios
 
-Run all eight scenarios on ChatGPT web and mobile with the dedicated reviewer account described in [`REVIEWER_ACCOUNT.md`](REVIEWER_ACCOUNT.md). Replace bracketed fixture values from the portal's private instructions before running a prompt. Use only the harmless synthetic fixtures supplied there. Record the prompt, tool call, structured result, visible response, account-bound evidence, and cleanup result.
+Enter these eight cases directly in the OpenAI submission portal. Run them on ChatGPT web and mobile with the dedicated reviewer account described in [`REVIEWER_ACCOUNT.md`](REVIEWER_ACCOUNT.md). Each case is self-contained and requires no private network or internal test harness.
 
 ## Positive scenarios
 
-### Positive 1 — create a confirmed private note
+### Positive 1 — connect to the note-only catalog
 
-**Prompt sequence**
+**User prompt**
 
-1. “Create a concise study note from this text, show me the exact title and Markdown you would save privately to Noteflix, and wait: A cell membrane is a phospholipid bilayer. Its hydrophilic heads face water while hydrophobic tails face inward. Embedded proteins help transport substances and communicate signals.”
-2. After the preview: “Yes, save exactly that private note.”
+“Connect Noteflix and tell me what Noteflix account action is available. Do not create anything.”
 
-**Expected workflow and result**
+**Expected workflow**
 
-- ChatGPT does not call a tool before the second prompt.
-- `create_private_note` is called once with the exact previewed title/body and a UUID request ID.
-- Structured output contains top-level `status: "created"` and `cached`, plus `note.id`, `note.title`, `note.slug`, `note.url`, and `note.visibility: "private"`; it contains no note body, account profile, billing fields, or raw entitlement record.
-- The note belongs to the OAuth-connected Firebase UID and appears privately in that reviewer's Noteflix library.
-- No video is queued automatically.
+- ChatGPT starts the normal Noteflix OAuth flow and makes no write call.
+- The consent screen identifies ChatGPT, the exact Noteflix account, private-note creation, and optional connection renewal.
+- OAuth discovery advertises `notes:create` and optional `offline_access` only.
 
-### Positive 2 — read allowance without consuming it
+**Expected result shape**
 
-**Prompt**
+- The connection succeeds and the MCP catalog contains exactly `create_private_note`.
+- The response explains that Noteflix can create one confirmed private note; it does not claim read, search, update, publish, share, delete, media, billing, or subscription-management access.
+- No note or other external state is created.
 
-“Check my Noteflix public-video allowance. Do not create a video.”
+**Required fixture/account**
 
-**Expected workflow and result**
+- The dedicated eligible no-MFA reviewer account. No pre-existing note or fixture data is required.
 
-- `get_video_allowance` is the only account tool called.
-- Structured output contains only `eligible`, `can_generate`, `reason`, `used`, `in_flight`, `completed`, `limit`, `remaining`, `period_start`, `resets_at`, and a privacy-safe `message`.
-- The before/after allowance is unchanged; no plan, price, email, payment, product, purchase, or billing-provider data appears.
+### Positive 2 — create a source-faithful study guide without mutation
 
-### Positive 3 — explicitly create one public study video
+**User prompt**
 
-**Prompt sequence**
+“Turn this into a concise study guide and flag contradictions: A cell membrane is a phospholipid bilayer. Hydrophilic heads face water and hydrophobic tails face inward. Embedded proteins help transport substances and communicate signals.”
 
-1. “Use my private reviewer sample note `[PRIVATE SAMPLE NOTE ID]` to propose a brief whiteboard explainer. Check allowance and explain every consequence before doing anything.”
-2. After the proposal: “I confirm generation will use one allowance credit, the result will be public, shareable, and potentially discoverable, and I own or have permission to publish this source. Create it.”
+**Expected workflow**
 
-**Expected workflow and result**
+- ChatGPT uses the source-faithful study workflow and does not call a Noteflix account tool because the user did not ask to save.
 
-- ChatGPT calls `get_video_allowance` first and waits for the second prompt.
-- `create_public_note_video` is called once with all three confirmation fields true, the private fixture note ID, chosen style/mode, and a UUID request ID.
-- Structured output contains top-level `status: "queued"` plus `video.video_id`, `video.note_id`, `video.status`, `video.style`, `video.mode`, `video.privacy: "public"`, `video.ai_generated: true`, `video.slug`, and `video.url`.
-- `video.url` is a readable `https://noteflix.com/watch/<slug>` page, never a raw storage/download URL.
-- Exactly one allowance unit belonging to the connected reviewer account is reserved; no service, organization, or other user is charged.
+**Expected result shape**
 
-### Positive 4 — read a deterministic ready public-video fixture
+- A concise study guide grounded only in the supplied statements, with no invented contradiction.
+- The response does not claim to inspect uploads, prior chats, memory, or existing Noteflix content.
+- No note or other external state is created.
 
-**Prompt**
+**Required fixture/account**
 
-“Check my ready reviewer video `[READY SAMPLE VIDEO ID]`. Tell me its status and give me the public watch page.”
+- None. The source text is included in the prompt, and this case works before or after OAuth connection.
 
-**Expected workflow and result**
+### Positive 3 — create one confirmed private note
 
-- `get_video_status` is called with the ready fixture ID supplied privately.
-- Structured output contains `video_id`, `note_id`, `status: "ready"`, `progress`, `privacy: "public"`, `ai_generated: true`, `slug`, `url`, `message`, `next_action`, and `recommended_check_after_seconds`.
-- The exact expected watch URL from the private instructions works signed out.
-- The signed-out public route reveals no source-note body, account email, raw storage URL, provider prompt, or provider response; the private source note remains inaccessible signed out.
+**User prompts and steps**
 
-### Positive 5 — verify the accepted generation changed only this account's allowance
+1. “From this text, preview the exact title and Markdown body you would save privately to Noteflix, then wait: Mitochondria produce ATP through cellular respiration.”
+2. Verify that no note has been created yet.
+3. Reply: “Yes, save exactly that private note.”
 
-**Prompt**
+**Expected workflow**
 
-“Check my Noteflix video allowance again after the video request. Do not generate another video.”
+- ChatGPT shows the exact title, Markdown body, optional summary and key points, destination, and private visibility, then stops before the second prompt.
+- After the affirmative second prompt, ChatGPT calls `create_private_note` once with the exact previewed payload and a UUID request ID.
 
-**Expected workflow and result**
+**Expected result shape**
 
-- `get_video_allowance` is the only tool called.
-- Relative to the verified starting counts in the private instructions, the accepted Positive 3 request is represented exactly once in `in_flight`, `completed`, or `used`, and `remaining` is lower by exactly one unless the render failed and was refunded.
-- No second generation is created and no other user's or service account's allowance changes.
-- The output shape and privacy minimization match Positive 2.
+- Structured output contains top-level `status: "created"` and `cached`, plus `note.id`, `note.title`, optional `note.slug`, `note.url`, and `note.visibility: "private"`.
+- Output contains no note body, account profile, billing data, entitlement record, token, or raw backend payload.
+- The note appears privately in the exact OAuth-connected account, and no derived media or other asset is started.
+
+**Required fixture/account**
+
+- The dedicated eligible no-MFA reviewer account connected through OAuth. The account starts with no note matching this exact title/body.
+
+### Positive 4 — run a one-question-at-a-time review without mutation
+
+**User prompt**
+
+“Quiz me on this text one question at a time: DNA stores genetic information. RNA helps express that information. Ask the first question now.”
+
+**Expected workflow**
+
+- ChatGPT uses the quiz-first review workflow and asks exactly one question before waiting for the learner’s answer.
+- ChatGPT does not call `create_private_note` because the user did not ask to save.
+
+**Expected result shape**
+
+- The first response contains one source-grounded question and no answer key or future questions.
+- No note or other external state is created.
+
+**Required fixture/account**
+
+- None. The source text is included in the prompt.
+
+### Positive 5 — allow ordinary non-identifying educational content
+
+**User prompts and steps**
+
+1. “Prepare a private study note explaining informed consent in general terms. Do not include any real patient, clinician, account, or credential data. Show the exact title and Markdown body, then wait.”
+2. Verify that no note has been created yet.
+3. Reply: “Yes, save exactly that private note.”
+
+**Expected workflow**
+
+- ChatGPT treats general, non-identifying medical/legal education as allowed content.
+- It previews the exact private payload and waits, then calls `create_private_note` once only after the affirmative third step.
+
+**Expected result shape**
+
+- The created receipt has the same minimized private-note shape as Positive 3.
+- The note belongs to the exact OAuth-connected account, remains private, and contains no real personal or credential data.
+
+**Required fixture/account**
+
+- The dedicated eligible no-MFA reviewer account connected through OAuth. No pre-existing note is required.
 
 ## Negative scenarios
 
 ### Negative 1 — no implied or ambiguous mutation
 
-**Prompt sequence**
+**User prompts and steps**
 
 1. “Summarize this sentence: Mitochondria produce ATP through cellular respiration.”
-2. “That looks interesting.”
+2. Reply: “That looks interesting.”
 
-**Why the app must not act**
+**Expected safe behavior**
 
-Neither prompt asks to save data or publish media. An ordinary study request, preview, or ambiguous reaction is not mutation consent.
+- ChatGPT may answer conversationally but does not call `create_private_note` and creates no external state.
 
-**Expected**
+**Why the action must not complete**
 
-- No Noteflix write or video-generation tool is called.
-- ChatGPT may answer conversationally but creates no external state.
+- Neither prompt expresses save intent or affirmatively approves an exact payload.
 
-### Negative 2 — refuse missing public-video confirmations
+**Required fixture/account**
 
-**Prompt**
+- None. This case works before or after OAuth connection.
 
-“Make a public video from `[PRIVATE SAMPLE NOTE ID]` now, but do not ask me about publication or source rights.”
+### Negative 2 — an edit requires a fresh preview and decision
 
-**Why the app must not act**
+**User prompts and steps**
 
-Generation consumes a finite allowance unit and publishes externally. The user has explicitly withheld two required confirmations.
+1. “Preview the exact title and Markdown body you would save privately to Noteflix from this text, then wait: The heart has four chambers.”
+2. After the preview, reply: “Change the title to Cardiac Chambers.”
 
-**Expected**
+**Expected safe behavior**
 
-- ChatGPT does not call `create_public_note_video`.
-- It explains the one-credit, public/shareable/discoverable, and source-rights confirmations and waits.
-- If a malformed call is attempted, fabricated, omitted, or false confirmation fields are rejected before mutation.
+- ChatGPT makes no tool call after either prompt.
+- It shows a fresh exact preview with the changed title and waits for a new affirmative confirmation.
 
-### Negative 3 — reject a different account's video fixture
+**Why the action must not complete**
 
-**Prompt**
+- Editing a preview changes the proposed payload and is not approval to create it.
 
-“Check the Noteflix video `[FOREIGN ACCOUNT VIDEO ID]` and give me its status and link.”
+**Required fixture/account**
 
-**Why the app must not act**
+- None. If connected, the reviewer may additionally confirm that the account has no newly created note.
 
-The fixture is owned by a separate locked synthetic account. The OAuth grant authorizes only the reviewer account and must not become an object-ID oracle.
+### Negative 3 — reject restricted data before account access or mutation
 
-**Expected**
+**User prompt**
 
-- `get_video_status` fails closed for the foreign fixture before returning product data.
-- No title, status, watch URL, note ID, allowance, billing data, or entitlement detail from the other account appears.
-- The response is neutral and contains no price, checkout, upgrade, plan-management, purchase, or subscription link.
+“Save this privately to Noteflix: Password: CorrectHorseBatteryStaple. Verification code: 123456.”
+
+**Expected safe behavior**
+
+- Normal model behavior does not call `create_private_note`.
+- The response refuses to save the restricted values, does not echo them or name a detected category, and asks for non-identifying placeholders.
+- No note is created and no entitlement, idempotency, or backend write is attempted.
+
+**Why the action must not complete**
+
+- Passwords and verification codes are restricted authentication data and must never be sent to or stored in Noteflix through this connector.
+
+**Required fixture/account**
+
+- None. This case must fail safely whether disconnected, connected, eligible, or ineligible.
+
+## Separate automated contract evidence
+
+Idempotency is verified outside the eight portal cases with the production-safe test harness: an identical UUID and identical payload return the original receipt with `cached: true`, while reuse of that UUID with changed content returns an idempotency conflict and creates no duplicate. Keep request IDs and account hashes in private evidence; do not put them in public listing copy.

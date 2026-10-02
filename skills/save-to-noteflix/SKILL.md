@@ -14,7 +14,7 @@ Proceed only when the learner explicitly asks to save, create, send, or store th
 ## Prepare the note
 
 1. Use only source text supplied in the learner's current request and the draft produced from that text in the current interaction. Do not inspect uploads, prior conversations, Claude memory, connectors, a Noteflix library, or any other source.
-2. Read [learning integrity and source handling](../../references/learning-integrity.md).
+2. Read [learning integrity and source handling](references/learning-integrity.md).
 3. Build a concise title and an exact Markdown body. Preserve the learner's meaning and do not add facts that were not in the approved artifact.
 4. Include `summary` or `key_points` only when those fields are already explicit in the artifact or the learner requests them. Do not infer sensitive attributes or add personal identifiers.
 5. Create a fresh UUID as `request_id`. Keep that same UUID for a retry of the same confirmed payload. If any field changes, create a new UUID only after the changed payload is confirmed.

@@ -13,7 +13,7 @@ import {
 } from "../src/oauth/policy.js";
 import { testConfig } from "./fixtures.js";
 
-function catalogServer() {
+function catalogServer(enableVideoTools = false) {
   return createNoteflixMcpServer({
     uid: "catalog-user",
     scopes: [
@@ -22,7 +22,7 @@ function catalogServer() {
       VIDEOS_READ_SCOPE,
       VIDEOS_PUBLISH_SCOPE,
     ],
-    config: testConfig(),
+    config: testConfig({ ENABLE_VIDEO_TOOLS: enableVideoTools ? "true" : "false" }),
     noteflixClient: {
       requireEligibleSubscription: vi.fn(),
       createPrivateNote: vi.fn(),
@@ -38,8 +38,8 @@ function catalogServer() {
   });
 }
 
-async function listTools() {
-  const server = catalogServer();
+async function listTools(enableVideoTools = false) {
+  const server = catalogServer(enableVideoTools);
   const client = new Client({ name: "catalog-test", version: "1" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
@@ -52,8 +52,8 @@ async function listTools() {
   }
 }
 
-async function rawToolsList() {
-  const server = catalogServer();
+async function rawToolsList(enableVideoTools = false) {
+  const server = catalogServer(enableVideoTools);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
 
@@ -105,7 +105,9 @@ async function rawToolsList() {
 
 describe("OpenAI app tool catalog", () => {
   it("emits current and legacy OAuth security-scheme fields on the wire", async () => {
-    const { tools } = await rawToolsList();
+    const defaultCatalog = await rawToolsList();
+    expect(defaultCatalog.tools.map((tool) => tool.name)).toEqual(["create_private_note"]);
+    const { tools } = await rawToolsList(true);
     expect(tools).toHaveLength(4);
     for (const tool of tools) {
       expect(tool.securitySchemes, tool.name).toEqual(
@@ -117,8 +119,8 @@ describe("OpenAI app tool catalog", () => {
     }
   });
 
-  it("publishes four narrowly scoped tools with exact schemas and safety annotations", async () => {
-    const tools = await listTools();
+  it("publishes four narrowly scoped tools only when video mode is explicitly enabled", async () => {
+    const tools = await listTools(true);
     expect(tools.map((tool) => tool.name)).toEqual([
       "create_private_note",
       "get_video_allowance",
@@ -138,9 +140,24 @@ describe("OpenAI app tool catalog", () => {
     ]);
     expect(byName.create_private_note?.description).toContain("payment-card data");
     expect(byName.create_private_note?.description).toContain("identifiable health information");
-    const contentSchema = byName.create_private_note?.inputSchema.properties
-      ?.content_markdown as { description?: string } | undefined;
+    const noteProperties = byName.create_private_note?.inputSchema.properties;
+    const titleSchema = noteProperties?.title as {
+      description?: string;
+      pattern?: string;
+    } | undefined;
+    const contentSchema = noteProperties?.content_markdown as {
+      description?: string;
+      pattern?: string;
+    } | undefined;
+    const summarySchema = noteProperties?.summary as { pattern?: string } | undefined;
+    const keyPointsSchema = noteProperties?.key_points as {
+      items?: { pattern?: string };
+    } | undefined;
     expect(contentSchema?.description).toContain("authentication tokens");
+    expect(titleSchema?.pattern).toBeUndefined();
+    expect(contentSchema?.pattern).toBeUndefined();
+    expect(summarySchema?.pattern).toBeUndefined();
+    expect(keyPointsSchema?.items?.pattern).toBeUndefined();
 
     expect(byName.get_video_allowance?.annotations).toMatchObject({
       readOnlyHint: true,

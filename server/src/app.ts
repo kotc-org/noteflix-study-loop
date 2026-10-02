@@ -16,10 +16,11 @@ import { NoteflixClient, type ServiceIdentityProvider } from "./noteflix/client.
 import { FirestoreOAuthStore } from "./oauth/firestore-store.js";
 import { IdentityToolkitVerifier, type NoteflixIdentityVerifier } from "./oauth/identity.js";
 import { NoteflixOAuthProvider, uidFromAuthInfo } from "./oauth/provider.js";
-import { SUPPORTED_SCOPES } from "./oauth/policy.js";
+import { supportedScopes } from "./oauth/policy.js";
 import { preserveOAuthStateOnErrorRedirect } from "./oauth/state-preservation.js";
 import { FirestoreIdempotencyStore, IdempotencyCoordinator } from "./persistence/idempotency.js";
 import { FirestoreFixedWindowRateLimiter, persistentMcpRateLimit } from "./persistence/rate-limit.js";
+import { createPublicInfoRouter } from "./public-info.js";
 
 export function validateMcpOrigin(config: AppConfig): RequestHandler {
   return (req, res, next) => {
@@ -59,6 +60,8 @@ export function createApp(config: AppConfig, runtime: RuntimeDependencies) {
   const noteflixClient = new NoteflixClient(config, serviceIdentity);
   const idempotency = new IdempotencyCoordinator(new FirestoreIdempotencyStore(runtime.db, config));
   const persistentLimiter = new FirestoreFixedWindowRateLimiter(runtime.db, config);
+  const scopesSupported = supportedScopes(config.enableVideoTools);
+  const resourceName = config.enableVideoTools ? "Noteflix Study & Video" : "Noteflix";
 
   app.use((_req, res, next) => {
     res.set({
@@ -68,6 +71,8 @@ export function createApp(config: AppConfig, runtime: RuntimeDependencies) {
     });
     next();
   });
+
+  app.use(createPublicInfoRouter(config));
 
   app.get("/health", (_req, res) => res.status(200).json({ status: "ok" }));
   app.get("/.well-known/openai-apps-challenge", (_req, res) => {
@@ -82,7 +87,7 @@ export function createApp(config: AppConfig, runtime: RuntimeDependencies) {
   });
   app.get("/", (_req, res) =>
     res.status(200).json({
-      name: "Noteflix Study & Video MCP",
+      name: `${resourceName} MCP`,
       resource: config.mcpResourceUrl.href,
       documentation: config.serviceDocumentationUrl.href,
     }),
@@ -96,7 +101,7 @@ export function createApp(config: AppConfig, runtime: RuntimeDependencies) {
     issuerUrl: config.publicBaseUrl,
     baseUrl: config.publicBaseUrl,
     serviceDocumentationUrl: config.serviceDocumentationUrl,
-    scopesSupported: [...SUPPORTED_SCOPES],
+    scopesSupported,
   });
   oauthMetadata.revocation_endpoint_auth_methods_supported = ["client_secret_post", "none"];
   app.get("/.well-known/oauth-authorization-server", (_req, res) =>
@@ -111,8 +116,8 @@ export function createApp(config: AppConfig, runtime: RuntimeDependencies) {
       baseUrl: config.publicBaseUrl,
       resourceServerUrl: config.mcpResourceUrl,
       serviceDocumentationUrl: config.serviceDocumentationUrl,
-      scopesSupported: [...SUPPORTED_SCOPES],
-      resourceName: "Noteflix Study & Video",
+      scopesSupported,
+      resourceName,
       authorizationOptions: {
         rateLimit: {
           windowMs: 15 * 60 * 1000,
@@ -145,9 +150,9 @@ export function createApp(config: AppConfig, runtime: RuntimeDependencies) {
   const protectedResourceMetadata = {
     resource: config.mcpResourceUrl.href,
     authorization_servers: [config.publicBaseUrl.href],
-    scopes_supported: [...SUPPORTED_SCOPES],
+    scopes_supported: scopesSupported,
     bearer_methods_supported: ["header"],
-    resource_name: "Noteflix Study & Video",
+    resource_name: resourceName,
     resource_documentation: config.serviceDocumentationUrl.href,
   };
   app.get("/.well-known/oauth-protected-resource", (_req, res) =>

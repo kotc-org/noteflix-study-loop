@@ -43,5 +43,7 @@ describe("OAuth consent return destination", () => {
     expect(html).toContain("<strong>Local callback:</strong>");
     expect(html).toContain("<code>127.0.0.1</code>");
     expect(html).toContain("Approve only if you started this Noteflix connection in a local app.");
+    expect(html).toContain("required for note actions");
+    expect(html).not.toContain("Generated videos are public");
   });
 });

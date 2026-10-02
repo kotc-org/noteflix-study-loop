@@ -66,12 +66,94 @@ class MemoryOAuthStore implements OAuthStore {
 }
 
 describe("OAuth provider flow", () => {
-  it("uses callback-specific defaults only when the client omits scopes", async () => {
+  it("keeps ChatGPT grants note-only when video mode is disabled", async () => {
     const store = new MemoryOAuthStore();
     const provider = new NoteflixOAuthProvider(
       store,
       { verify: vi.fn() },
       testConfig(),
+    );
+    const client: OAuthClientInformationFull = {
+      client_id: "chatgpt-note-only-client",
+      client_id_issued_at: 1,
+      redirect_uris: ["https://chatgpt.com/connector/oauth/note_only_123"],
+      token_endpoint_auth_method: "none",
+    };
+    const redirect = vi.fn();
+
+    await provider.authorize(
+      client,
+      {
+        codeChallenge: "challenge",
+        redirectUri: client.redirect_uris[0]!,
+        resource: testConfig().mcpResourceUrl,
+      },
+      { redirect } as unknown as Response,
+    );
+    expect(store.request?.record.scopes).toEqual(["notes:create"]);
+    await expect(provider.authorize(
+      client,
+      {
+        scopes: ["videos:read"],
+        codeChallenge: "challenge",
+        redirectUri: client.redirect_uris[0]!,
+        resource: testConfig().mcpResourceUrl,
+      },
+      { redirect } as unknown as Response,
+    )).rejects.toThrow(/Unsupported scope/);
+  });
+
+  it("downscopes a legacy mixed refresh grant when video mode is disabled", async () => {
+    const store = new MemoryOAuthStore();
+    const config = testConfig();
+    const provider = new NoteflixOAuthProvider(store, { verify: vi.fn() }, config);
+    const client: OAuthClientInformationFull = {
+      client_id: "legacy-mixed-client",
+      client_id_issued_at: 1,
+      redirect_uris: ["https://chatgpt.com/connector/oauth/legacy_mixed_123"],
+      token_endpoint_auth_method: "none",
+    };
+    store.refresh.set("legacy-refresh-token", {
+      clientId: client.client_id,
+      uid: "legacy-user",
+      scopes: ["notes:create", "videos:read", "offline_access"],
+      resource: config.mcpResourceUrl.href,
+      createdAtMs: Date.now(),
+      expiresAtMs: Date.now() + 60_000,
+    });
+
+    const tokens = await provider.exchangeRefreshToken(
+      client,
+      "legacy-refresh-token",
+      undefined,
+      config.mcpResourceUrl,
+    );
+    await expect(provider.verifyAccessToken(tokens.access_token)).resolves.toMatchObject({
+      scopes: ["notes:create", "offline_access"],
+    });
+
+    store.refresh.set("legacy-video-only-token", {
+      clientId: client.client_id,
+      uid: "legacy-user",
+      scopes: ["videos:read", "offline_access"],
+      resource: config.mcpResourceUrl.href,
+      createdAtMs: Date.now(),
+      expiresAtMs: Date.now() + 60_000,
+    });
+    await expect(provider.exchangeRefreshToken(
+      client,
+      "legacy-video-only-token",
+      undefined,
+      config.mcpResourceUrl,
+    )).rejects.toThrow(/exceeds the original grant/);
+  });
+
+  it("uses callback-specific defaults when video mode is explicitly enabled", async () => {
+    const store = new MemoryOAuthStore();
+    const provider = new NoteflixOAuthProvider(
+      store,
+      { verify: vi.fn() },
+      testConfig({ ENABLE_VIDEO_TOOLS: "true" }),
     );
     const redirect = vi.fn();
     const baseClient = {
@@ -132,7 +214,7 @@ describe("OAuth provider flow", () => {
   it("binds Firebase consent, authorization code, access token, and refresh token to one resource", async () => {
     const store = new MemoryOAuthStore();
     const identityVerifier = { verify: vi.fn().mockResolvedValue({ uid: "firebase-user-1" }) };
-    const config = testConfig();
+    const config = testConfig({ ENABLE_VIDEO_TOOLS: "true" });
     const provider = new NoteflixOAuthProvider(store, identityVerifier, config);
     const client: OAuthClientInformationFull = {
       client_id: "chatgpt-client",

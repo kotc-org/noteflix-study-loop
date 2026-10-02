@@ -41,14 +41,23 @@ describe("remote MCP HTTP contract", () => {
     expect(response.body).toMatchObject({
       resource: "http://localhost:8080/mcp",
       authorization_servers: ["http://localhost:8080/"],
-      scopes_supported: [
-        "notes:create",
-        "videos:create",
-        "videos:read",
-        "videos:publish",
-        "offline_access",
-      ],
+      scopes_supported: ["notes:create", "offline_access"],
+      resource_name: "Noteflix",
     });
+  });
+
+  it("advertises video scopes only when video tools are explicitly enabled", async () => {
+    const app = createApp(testConfig({ ENABLE_VIDEO_TOOLS: "true" }), { db: {} as never });
+    const response = await request(app).get("/.well-known/oauth-protected-resource/mcp");
+    expect(response.status).toBe(200);
+    expect(response.body.scopes_supported).toEqual([
+      "notes:create",
+      "videos:create",
+      "videos:read",
+      "videos:publish",
+      "offline_access",
+    ]);
+    expect(response.body.resource_name).toBe("Noteflix Study & Video");
   });
 
   it("advertises revocation for both public and confidential DCR clients", async () => {

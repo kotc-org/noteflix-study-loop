@@ -217,7 +217,7 @@ export class NoteflixClient {
    */
   async requireEligibleSubscription(uid: string): Promise<void> {
     const endpoint = new URL(
-      "/internal/claude-mcp/subscription-eligibility",
+      "/internal/openai-mcp/subscription-eligibility",
       this.config.noteflixInternalAudience,
     );
     const identityClient = await this.getServiceIdentityClient();
@@ -228,7 +228,7 @@ export class NoteflixClient {
         url: endpoint.href,
         method: "GET",
         headers: {
-          "x-noteflix-integration": "claude-mcp",
+          "x-noteflix-integration": "openai-mcp",
           "x-noteflix-user-id": uid,
         },
         timeout: this.config.noteflixRequestTimeoutMs,
@@ -292,7 +292,7 @@ export class NoteflixClient {
     uid: string,
     input: CreatePrivateNoteInput,
   ): Promise<CreatedPrivateNote> {
-    const endpoint = new URL("/internal/claude-mcp/ai-notes", this.config.noteflixInternalAudience);
+    const endpoint = new URL("/internal/openai-mcp/ai-notes", this.config.noteflixInternalAudience);
     const identityClient = await this.getServiceIdentityClient();
 
     let response: { status: number; data: unknown };
@@ -304,7 +304,8 @@ export class NoteflixClient {
           "content-type": "application/json",
           "idempotency-key": input.request_id,
           "x-request-id": input.request_id,
-          "x-noteflix-integration": "claude-mcp",
+          "x-noteflix-integration": "openai-mcp",
+          "x-noteflix-user-id": uid,
         },
         data: {
           ...buildPrivateNotePayload(input),
@@ -392,7 +393,7 @@ export class NoteflixClient {
   async getVideoAllowance(uid: string): Promise<VideoAllowance> {
     const endpoint = new URL(
       "/internal/claude-media/v2/video-allowance",
-      this.config.noteflixInternalAudience,
+      this.config.noteflixVideoInternalAudience,
     );
     const response = await this.mediaRequest(endpoint, uid, "GET");
     if (response.status < 200 || response.status >= 300) {
@@ -432,9 +433,11 @@ export class NoteflixClient {
   ): Promise<RequestedPublicVideo> {
     const endpoint = new URL(
       `/internal/claude-media/v2/ai-notes/${encodeURIComponent(input.note_id)}/public-notebook-video`,
-      this.config.noteflixInternalAudience,
+      this.config.noteflixVideoInternalAudience,
     );
-    const identityClient = await this.getServiceIdentityClient();
+    const identityClient = await this.getServiceIdentityClient(
+      this.config.noteflixVideoInternalAudience,
+    );
     let response: { status: number; data: unknown };
     try {
       response = await identityClient.request({
@@ -496,7 +499,7 @@ export class NoteflixClient {
   async getVideoStatus(uid: string, videoId: string): Promise<PublicVideoStatus> {
     const endpoint = new URL(
       `/internal/claude-media/v2/notebook-videos/${encodeURIComponent(videoId)}/status`,
-      this.config.noteflixInternalAudience,
+      this.config.noteflixVideoInternalAudience,
     );
     const response = await this.mediaRequest(endpoint, uid, "GET");
     if (response.status < 200 || response.status >= 300) {
@@ -546,7 +549,9 @@ export class NoteflixClient {
     uid: string,
     method: "GET",
   ): Promise<{ status: number; data: unknown }> {
-    const identityClient = await this.getServiceIdentityClient();
+    const identityClient = await this.getServiceIdentityClient(
+      this.config.noteflixVideoInternalAudience,
+    );
     try {
       return await identityClient.request({
         url: endpoint.href,
@@ -737,10 +742,12 @@ export class NoteflixClient {
     return new URL(`/watch/${encodeURIComponent(slug)}`, this.config.noteflixAppBaseUrl).href;
   }
 
-  private async getServiceIdentityClient(): Promise<Pick<IdTokenClient, "request">> {
+  private async getServiceIdentityClient(
+    audience = this.config.noteflixInternalAudience,
+  ): Promise<Pick<IdTokenClient, "request">> {
     try {
       return await this.serviceIdentity.getIdTokenClient(
-        this.config.noteflixInternalAudience.origin,
+        audience.origin,
       );
     } catch {
       throw new NoteflixApiError(

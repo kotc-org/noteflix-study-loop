@@ -23,6 +23,15 @@ describe("create_private_note contract", () => {
     expect(schema.safeParse({ ...valid, isPublic: true }).success).toBe(false);
   });
 
+  it("rejects whitespace-only exact-text fields without altering valid text", () => {
+    const schema = createPrivateNoteInputSchema();
+    expect(schema.safeParse({ ...valid, title: "   " }).success).toBe(false);
+    expect(schema.safeParse({ ...valid, content_markdown: "\n\t" }).success).toBe(false);
+    expect(schema.safeParse({ ...valid, summary: "   " }).success).toBe(false);
+    expect(schema.safeParse({ ...valid, key_points: ["\t"] }).success).toBe(false);
+    expect(schema.parse({ ...valid, title: "  Exact title  " }).title).toBe("  Exact title  ");
+  });
+
   it("constructs only the allowlisted private integration payload", () => {
     const payload = buildPrivateNotePayload(createPrivateNoteInputSchema().parse(valid));
     expect(Object.keys(payload).sort()).toEqual(
@@ -50,7 +59,7 @@ describe("create_private_note contract", () => {
       isVisible: false,
       isPublic: false,
       visibility: "private",
-      integrationSource: "claude-mcp",
+      integrationSource: "openai-mcp",
       derivedAssets: [],
     });
   });
