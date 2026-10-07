@@ -28,6 +28,14 @@ The server uses the official MCP TypeScript SDK's stateless Streamable HTTP tran
 | OpenAI domain challenge | `GET /.well-known/openai-apps-challenge` after `OPENAI_APPS_CHALLENGE_TOKEN` is configured |
 | Health | `GET /health` |
 
+Public information pages remain crawlable for Google, Bing, and ChatGPT search.
+`GET /robots.txt` allows public content and excludes only OAuth, MCP, and consent
+routes. Those protocol responses also carry `X-Robots-Tag: noindex`; their status
+codes, authentication, and supported methods are unchanged. Robots exclusions
+stop crawler requests rather than making API endpoints indexable. Crawlers cannot
+read a noindex header on a robots-blocked URL, so Search Console may classify these
+URLs as intentionally blocked by robots.txt instead of reporting a 4xx issue.
+
 Unauthenticated MCP requests return `401` with a `WWW-Authenticate` link to the path-specific Protected Resource Metadata document. Authorization and token requests must use the exact, fragment-free `MCP_RESOURCE_URL`. Access and refresh grants are audience-bound and each tool enforces its own scope.
 
 ## User identity and subscription boundary

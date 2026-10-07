@@ -72,6 +72,21 @@ export function createApp(config: AppConfig, runtime: RuntimeDependencies) {
     next();
   });
 
+  // Protocol endpoints are not public content. Keep their authentication and
+  // method errors intact while leaving the public information pages crawlable.
+  const protocolPaths = ["/authorize", "/register", "/revoke", "/token", "/mcp", "/consent"];
+  app.use(protocolPaths, (_req, res, next) => {
+    res.set("X-Robots-Tag", "noindex");
+    next();
+  });
+  app.get("/robots.txt", (_req, res) =>
+    res
+      .set("Cache-Control", "public, max-age=300")
+      .type("text/plain")
+      .status(200)
+      .send(["User-agent: *", "Allow: /", ...protocolPaths.map((path) => `Disallow: ${path}`), ""].join("\n")),
+  );
+
   app.use(createPublicInfoRouter(config));
 
   app.get("/health", (_req, res) => res.status(200).json({ status: "ok" }));
