@@ -1,9 +1,6 @@
-name: Security - PolinRider guard
+name: "Manual — Security - PolinRider guard"
 
-on:
-  push: {}
-  pull_request: {}
-  merge_group: {}
+'on':
   workflow_dispatch: {}
 
 permissions:
